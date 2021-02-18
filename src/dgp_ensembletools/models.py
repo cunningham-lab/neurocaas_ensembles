@@ -22,6 +22,92 @@ import matplotlib
 from matplotlib import pyplot as plt
 from matplotlib import animation
 from moviepy.editor import VideoFileClip,VideoClip
+from joblib import Memory
+location = '/Volumes/TOSHIBA EXT STO/cache'
+memory = Memory(location, verbose=0)
+
+#vars: video_name,frame_range,proj_config,shuffle,dgp_model_file,  
+def _get_poses_and_heatmap(video_path,frame_range,cfg,proj_config,shuffle,dgp_model_file):
+    """Internal function to get poses and heatmap to access cache.
+
+    """
+    full_video_clip = get_video_clip(video_path,None)
+    n_frames2 = min(frame_range[-1] + 1, np.ceil(full_video_clip.fps * full_video_clip.duration).astype('int'))
+    offset=frame_range[0] 
+    video_clip = get_video_clip(video_path,range(offset,n_frames2))
+    fps = video_clip.fps
+
+    dlc_cfg = get_train_config(proj_config, shuffle=shuffle)
+    print('done')
+    # %%
+    try:
+        dlc_cfg.net_type = 'resnet_50'
+        sess, mu_n, softmax_tensor, scmap, locref, inputs = setup_dgp_eval_graph(dlc_cfg,
+                                                                                 dgp_model_file)
+    except:
+        dlc_cfg.net_type = 'resnet_101'
+        sess, mu_n, softmax_tensor, scmap, locref, inputs = setup_dgp_eval_graph(dlc_cfg,
+                                                                                 dgp_model_file)
+    nj = dlc_cfg.num_joints
+    bodyparts = cfg['bodyparts']
+    # %%
+    nx, ny = video_clip.size
+    nx_out, ny_out = int((nx - dlc_cfg.stride/2)/dlc_cfg.stride  + 5), int((ny - dlc_cfg.stride/2)/dlc_cfg.stride  + 5)
+    #%%
+    markers = np.zeros((n_frames2 + 1, dlc_cfg.num_joints, 2))
+    likes = np.zeros((n_frames2 + 1, dlc_cfg.num_joints))
+    softmaxtensor = np.zeros((n_frames2 + 1, ny_out, nx_out, dlc_cfg.num_joints))
+    pbar = tqdm(total=n_frames2, desc='processing video frames')
+    for ii, frame in enumerate(video_clip.iter_frames()):
+        ff = img_as_ubyte(frame)
+        mu_n_batch, pred_np1 = sess.run( [mu_n,  scmap], feed_dict={inputs: ff[None, :, :, :]})
+        nx_out_true, ny_out_true, _ = pred_np1[0].shape
+        markers[ii] = mu_n_batch[0]
+        num_frames = mu_n_batch.shape[0]  # nb #+ 1
+        sigmoid_pred_np = np.exp(pred_np1) / (np.exp(pred_np1) + 1)        
+        #softmaxtensor[ii][:nx_out_true,:ny_out_true] = sigmoid_pred_np[0]
+        softmaxtensor[ii][:nx_out_true,:ny_out_true] = pred_np1[0]
+        mu_likelihoods = np.zeros((num_frames, nj, 2)).astype('int')
+        likelihoods = np.zeros((num_frames, nj))
+        offset_mu_jj = 0
+        for ff_idx in range(num_frames):
+            for jj_idx in range(nj):
+                # continuous so pick max in
+                mu_jj = mu_n_batch[ff_idx, jj_idx]
+                ends_floor = np.floor(mu_jj).astype('int') - offset_mu_jj
+                ends_ceil = np.ceil(mu_jj).astype('int') + 1 + offset_mu_jj
+                sigmoid_pred_np_jj = sigmoid_pred_np[ff_idx, :, :, jj_idx]
+                spred_centered = sigmoid_pred_np_jj[ ends_floor[0]: ends_ceil[0],
+                                 ends_floor[1]: ends_ceil[1]]
+                mu_likelihoods[ff_idx, jj_idx] = np.unravel_index(
+                    np.argmax(spred_centered), spred_centered.shape)
+                mu_likelihoods[ff_idx, jj_idx] += [ends_floor[0], ends_floor[1]]
+                likelihoods[ff_idx, jj_idx] = sigmoid_pred_np_jj[
+                    int(mu_likelihoods[ff_idx, jj_idx][0]), int(mu_likelihoods[ff_idx, jj_idx][1])]
+        likes[ii] = likelihoods[0]
+        pbar.update(1)
+
+    likes = likes[:ii+1]
+    markers = markers[:ii+1]
+    softmaxtensor = softmaxtensor[:ii+1,:nx_out_true,:ny_out_true,:]
+    pbar.close()
+    sess.close()
+    video_clip.close()
+    print('Finished collecting markers')
+    print('\n')
+    xx = markers[:, :, 1] * dlc_cfg.stride + 0.5 * dlc_cfg.stride
+    yy = markers[:, :, 0] * dlc_cfg.stride + 0.5 * dlc_cfg.stride
+
+    return xx, yy, likes, nj, bodyparts, softmaxtensor, dlc_cfg
+
+def get_video_clip(video_path,frame_range = None):
+    full_clip = VideoFileClip(str(video_path))
+    if frame_range is None:
+        return full_clip
+    else:
+        assert type(frame_range) == type(range(0,1))
+        subclip = full_clip.subclip(frame_range[0]/full_clip.fps,frame_range[-1]/full_clip.fps)
+        return subclip
 
 colors = ["red","blue","green","purple","magenta","yellow"]
 markers = ['d','s','o','p','*','^','<','>','h']
@@ -81,7 +167,7 @@ class Ensemble():
         softmaxtensors = []
         for i in range(len(self.models)):
             model = self.models[i]
-            xr,yr,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_range(video_name,frame_range,snapshot,shuffle)
+            xr,yr,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_cache(video_name,frame_range,snapshot,shuffle)
             softmaxtensors.append(softmaxtensor)    
         ref_ = np.median(softmaxtensors,0)    
         ref_x = np.empty_like(xr)
@@ -208,13 +294,8 @@ class TrainedModel():
         """
         assert video_name in self.pred_video_files, "video must have been predicted on."
         video_path = os.path.join(self.project_dir,"videos_pred",video_name)
-        full_clip = VideoFileClip(str(video_path))
-        if frame_range is None:
-            return full_clip
-        else:
-            assert type(frame_range) == type(range(0,1))
-            subclip = full_clip.subclip(frame_range[0]/full_clip.fps,frame_range[-1]/full_clip.fps)
-            return subclip
+        clip = get_video_clip(video_path,frame_range = frame_range)
+        return clip
 
     def get_poses_and_heatmap(self,video_name,framenb,snapshot = "snapshot-step2-final--0",shuffle = 1):
         """Gets the pose and heatmap information of a predicted video for n_frames consecutive frames, starting from the first in a subclip determined by frame_range. Originally given as get_body in plot_cmap5. Note strange behavior with iter frames: iter_frames on a clip with one frame does not give that first frame. 
@@ -398,4 +479,38 @@ class TrainedModel():
 
         return xx, yy, likes, nj, bodyparts, softmaxtensor, dlc_cfg
         
+    def get_poses_and_heatmap_cache(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
+        """Gets the pose and heatmap information of a predicted video for n_frames consecutive frames, starting from the first in a subclip determined by frame_range. Originally given as get_body in plot_cmap5. Note strange behavior with iter frames: iter_frames on a clip with one frame does not give that first frame. 
+        :param video_name: name of the video. 
+        :param frame_range: range of frames to predict on. 
+        :param snapshot: the name of the training snapshot to apply this analysis to. 
+        """
+        assert type(frame_range) == type(range(0,2))
+        print('Collecting markers from snapshot:')
+        print(snapshot)
+        print('\n')
+        snapshot_path, cfg_yaml = get_snapshot_path(snapshot, self.project_dir, shuffle=shuffle)
+        cfg = auxiliaryfunctions.read_config(cfg_yaml)
 
+        proj_cfg_file = str(cfg_yaml)
+        dgp_model_file = str(snapshot_path)
+        # %% estimate_pose
+        # load dlc project config file
+        print('loading dlc project config...')
+        with open(proj_cfg_file, 'r') as stream:
+            proj_config = yaml.safe_load(stream)
+        proj_config['video_path'] = None
+        proj_config["project_path"] = self.project_dir ## not running postprocessing in same place as inference, must change. 
+
+        #vars: video_name,frame_range,proj_config,shuffle,dgp_model_file,  
+        #def _get_poses_and_heatmap(video_path,frame_range,proj_config,shuffle,dgp_model_file):
+        video_path = os.path.join(self.project_dir,"videos_pred",video_name)
+        cached_heatmap_compute = memory.cache(_get_poses_and_heatmap)
+        xx, yy, likes, nj, bodyparts, softmaxtensor, dlc_cfg = cached_heatmap_compute(video_path,
+                frame_range,
+                cfg,
+                proj_config,
+                shuffle,
+                dgp_model_file)
+
+        return xx, yy, likes, nj, bodyparts, softmaxtensor, dlc_cfg

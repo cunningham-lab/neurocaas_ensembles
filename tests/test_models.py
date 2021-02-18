@@ -1,0 +1,81 @@
+## Test per-model code. 
+import numpy as np
+import pytest
+import dgp_ensembletools.models
+import os
+
+loc = os.path.abspath(os.path.dirname(__file__))
+
+class Test_Ensemble():
+    def test_init(self):
+        topdir = os.path.join(loc,"../","data")
+        modeldirs = ["{}".format(i+1) for i in range(4)]
+        dgp_ensembletools.models.Ensemble(topdir,modeldirs,ext="mp4")
+    def test_get_video_clip(self):
+        topdir = os.path.join(loc,"../","data")
+        modeldirs = ["{}".format(i+1) for i in range(4)]
+        ens = dgp_ensembletools.models.Ensemble(topdir,modeldirs,ext="mp4")
+        clip = ens.get_video_clip("ibl1_labeled.mp4",(0,1000))
+    def test_get_poses(self):
+        topdir = os.path.join(loc,"../","data")
+        modeldirs = ["{}".format(i+1) for i in range(4)]
+        ens = dgp_ensembletools.models.Ensemble(topdir,modeldirs,ext="mp4")
+        print(ens.get_poses("ibl1_labeled.mp4"))
+    def test_make_exampleframe(self):    
+        topdir = os.path.join(loc,"../","data")
+        modeldirs = ["{}".format(i+1) for i in range(4)]
+        ens = dgp_ensembletools.models.Ensemble(topdir,modeldirs,ext="mp4")
+        fig = ens.make_exampleframe(75,4,"ibl1_labeled.mp4",range(0,1000))
+        fig.savefig("./test{}frame.png".format(75))
+    def test_get_median_pose(self):
+        topdir = os.path.join(loc,"../","data")
+        modeldirs = ["{}".format(i+1) for i in range(1)]
+        ens = dgp_ensembletools.models.Ensemble(topdir,modeldirs,ext="mp4")
+        med = ens.get_median_pose("ibl1_labeled.mp4",range(0,4))
+
+
+class Test_TrainedModel():
+    def test_init(self):
+        relpath = "data/1/"
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        assert tm.pred_videos == ["ibl1_labeled.mp4"]
+        assert tm.label_files == ["ibl1_labeled.csv"]
+        
+    def test_get_poses_raw(self):    
+        relpath = "data/1/"
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        poses = tm.get_poses_raw("ibl1_labeled.mp4")
+        for pk in poses.keys():
+            assert pk in ["x","y","likelihoods"]
+            assert type(poses[pk]) == np.ndarray
+
+    def test_get_video_clip(self):
+        relpath = "data/1/"
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        clip = tm.get_video_clip("ibl1_labeled.mp4",range(0,1000))
+    def test_get_video_clip_fail(self):
+        relpath = "data/1/"
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        with pytest.raises(AssertionError):
+            clip = tm.get_video_clip("ibl1_labeled.mp4",(0,1000))
+    def test_get_poses_array(self):
+        relpath = "data/1/"
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        labelarray = tm.get_poses_array("ibl1_labeled.mp4")
+        assert type(labelarray) == np.ndarray
+        assert labelarray.shape[1:] == (2,4)
+    def test_get_poses_and_heatmap_range(self):    
+        relpath = "data/1/"
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        all_outs = tm.get_poses_and_heatmap_range("ibl1_labeled.mp4",frame_range = range(0,2))
+    def test_get_poses_and_heatmap_cache(self):    
+        relpath = "data/1/"
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        all_outs = tm.get_poses_and_heatmap_cache("ibl1_labeled.mp4",frame_range = range(0,2))
+
+    @pytest.mark.xfail    
+    def test_get_poses_and_heatmap(self):    
+        relpath = "data/1/"
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        all_outs = tm.get_poses_and_heatmap("ibl1_labeled.mp4",framenb = 0)
+
