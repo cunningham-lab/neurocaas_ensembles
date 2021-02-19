@@ -23,7 +23,8 @@ from matplotlib import pyplot as plt
 from matplotlib import animation
 from moviepy.editor import VideoFileClip,VideoClip
 from joblib import Memory
-location = '/Volumes/TOSHIBA EXT STO/cache'
+#location = '/Volumes/TOSHIBA EXT STO/cache'
+location = "/home/ubuntu/cache"
 memory = Memory(location, verbose=0)
 
 #vars: video_name,frame_range,proj_config,shuffle,dgp_model_file,  
@@ -155,6 +156,33 @@ class Ensemble():
         for model in self.models:
             xx,yy,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_info(video_name,frame_range,snapshot,shuffle)
 
+    def get_mean_pose(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
+        """Gets the scoremaps across the ensemble for this frame range of this video at this snapshot, and calculates the mean pose from it.  
+        NOTE: passing frame_range(0,2) will give 1 frame, not 2 as you would expect.  
+        TODO: Write test for this.  
+        :param video_name:
+        :param frame_range:
+        :param snapshot:
+        :param shuffle:
+
+        """
+        softmaxtensors = []
+        for i in range(len(self.models)):
+            model = self.models[i]
+            xr,yr,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_cache(video_name,frame_range,snapshot,shuffle)
+            softmaxtensors.append(softmaxtensor)    
+        ref_ = np.mean(softmaxtensors,0)    
+        ref_x = np.empty_like(xr)
+        ref_y = np.empty_like(yr)
+        len_range = len(frame_range)-1 ## just index relative to the subclip. Strangely moviepy returns len(framerange) -1 frames...
+        for nt0 in range(len_range):
+            for njj0 in range(nj):
+                ref_y[nt0,njj0], ref_x[nt0,njj0] = np.unravel_index(np.argmax(ref_[nt0,:,:,njj0]), ref_.shape[1:3])
+        ref_x = ref_x* dlc_cfg.stride + 0.5 * dlc_cfg.stride
+        ref_y = ref_y* dlc_cfg.stride + 0.5 * dlc_cfg.stride
+                
+        return ref_x,ref_y
+
     def get_median_pose(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
         """Gets the scoremaps across the ensemble for this frame range of this video at this snapshot, and calculates the median pose from it.  
         NOTE: passing frame_range(0,2) will give 1 frame, not 2 as you would expect. 
@@ -181,6 +209,61 @@ class Ensemble():
                 
         return ref_x,ref_y
 
+    def make_exampleframe_premedian(self,t,z,video_name,frame_range,medpose):    
+        """
+        Make an example frame showing the detections of all of the networks in the ensemble toether, as well as the median pose. This is the case where you have pre-computed the median pose and can pass it to the function. 
+        :param t: the frame index to make an example frame from.
+        :param z: the length of trace history to show on the frame, in frame indicees
+        :param video_name: name of a moviepy video. 
+        :param frame_range: range of frames we are calculating over. 
+        :param medpose: the median pose for the frame t. Should be of shape (xy,part)  
+        """
+        assert type(frame_range) == type(range(0,1))
+        poses = self.get_poses(video_name)
+        ensemble_pose = {}
+        for key,p in poses.items():
+            ensemble_pose[key] = p[frame_range,:,:]
+
+        clip = self.get_video_clip(video_name,frame_range)    
+        plt.imshow(clip.get_frame(t/clip.fps))
+        for i in range(len(self.models)):
+            for part in range(ensemble_pose["run{}".format(i)].shape[-1]):
+                if part == 0:
+                    plt.plot(*ensemble_pose["run{}".format(i)][t,:,part],
+                            "o",
+                            markersize = 4,
+                            marker = markers[part],
+                            linestyle = None,
+                            color = colors[i],
+                            label = "run{}".format(i),
+                            alpha = 0.5)
+                else:    
+                    plt.plot(*ensemble_pose["run{}".format(i)][t,:,part],
+                            "o",
+                            markersize = 4,
+                            marker = markers[part],
+                            linestyle = None,
+                            color = colors[i],
+                            alpha = 0.5)
+        for part in range(ensemble_pose["run{}".format(i)].shape[-1]):
+            if part == 0:
+                plt.plot(*medpose[:,part],
+                        "x",
+                        linestyle = 'None',
+                        markersize = 5,
+                        marker = markers[part],
+                        label = "median",
+                        color = colors[-1])
+            else:    
+                plt.plot(*medpose[:,part],
+                        "x",
+                        linestyle = 'None',
+                        markersize = 5,
+                        marker = markers[part],
+                        color = colors[-1])
+        plt.axis("off")        
+        plt.legend() 
+        return plt.gcf()
     def make_exampleframe(self,t,z,video_name,frame_range):    
         """
         Make an example frame showing the detections of all of the networks in the ensemble toether, as well as the median pose. 
@@ -218,15 +301,6 @@ class Ensemble():
                             linestyle = None,
                             color = colors[i],
                             alpha = 0.5)
-        #for i in range(len(self.models)):
-        #    plt.plot(*ensemble_pose["run{}".format(i)][t,:,:],
-        #            "o",
-        #            linestyle = 'None',
-        #            marker = markers[]
-        #            markersize = 1,
-        #            label = "run{}".format(i),
-        #            color = colors[i],
-        #            alpha = 0.3)
         for part in range(ensemble_pose["run{}".format(i)].shape[-1]):
             if part == 0:
                 plt.plot(*medpose[0,:,part],
