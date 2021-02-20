@@ -20,7 +20,16 @@ task = sys.argv[1]#"ibl1"
 scorer = sys.argv[2]#"kelly"
 date = sys.argv[3]#"2020-07-15"
 basepath = str(sys.argv[4])
-#import pdb; pdb.set_trace()
+try:
+    nb_frames = int(sys.argv[5])
+    assert type(nb_frames) == int
+except Exception:    
+    nb_frames = None
+try:
+    seed = int(sys.argv[6])
+    assert type(seed) == int
+except Exception:    
+    seed = None
 print('sys',sys.argv)
 """
 task="iblright"
@@ -86,7 +95,7 @@ cfg['pos_dist_thresh'] = 8
 cfg["skeleton"] = skeleton
 cfg["bodyparts"] = bodyparts
 cfg["default_net_type"] = "resnet_50" #resnet_101
-cfg["numframes2pick"] = None
+cfg["numframes2pick"] = nb_frames ## Change 1: set this to some predetermined fraction of total frmes (do we see the total frames? )
 
 #% rewrite config file
 print("Rewriting config...")
@@ -94,7 +103,7 @@ deeplabcut.auxiliaryfunctions.write_config(config_path, cfg)
 
 #%% Extract labeled frames from videos
 print("Extracting labeled frames...")
-numframes2pick = create_labels_md(config_path, video_path, scorer)
+numframes2pick = create_labels_md(config_path, video_path, scorer,seed=seed)
 #cfg["numframes2pick"] = numframes2pick
 
 #%% Check the labeled frames
