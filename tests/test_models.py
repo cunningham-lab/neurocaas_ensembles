@@ -1,6 +1,7 @@
 ## Test per-model code. 
 import numpy as np
 import pytest
+import matplotlib.pyplot as plt
 import dgp_ensembletools.models
 import os
 
@@ -78,4 +79,53 @@ class Test_TrainedModel():
         relpath = "data/1/"
         tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
         all_outs = tm.get_poses_and_heatmap("ibl1_labeled.mp4",framenb = 0)
+ 
+    def test_get_groundtruth(self):
+        relpath = "data/1/"
+        datapath = "/Users/taigaabe/Downloads/ibl1_true_xy_all_918pm.mat"
+        videopath = "ibl1_labeled.mp4"
+        t = 305 
+
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        clip = tm.get_video_clip(videopath)
+        out = tm.get_groundtruth(datapath)
+        
+        poses = tm.get_poses_array(videopath)
+        frame = clip.get_frame(t/clip.fps)
+        plt.imshow(frame)
+        plt.plot(*poses[t,:,:],label = "auto",color = "blue")
+        plt.plot(*out[t,:,:],label = "gt",color="orange")
+        plt.plot(*poses[t,:,0],"o",markersize = 5,color = "blue")
+        plt.plot(*out[t,:,0],"o",markersize = 5,color = "orange")
+        plt.legend()
+        plt.savefig(f"test_get_groundtruth_frame{t}.png")
+
+    def test_get_groundtruth_perm(self):
+        relpath = "data/1/"
+        datapath = "/Users/taigaabe/Downloads/ibl1_true_xy_all_918pm.mat"
+        videopath = "ibl1_labeled.mp4"
+        t = 305 
+
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        clip = tm.get_video_clip(videopath)
+        out = tm.get_groundtruth(datapath,partperm = [1,3,0,2])
+        
+        poses = tm.get_poses_array(videopath)
+        frame = clip.get_frame(t/clip.fps)
+        plt.imshow(frame)
+        plt.plot(*poses[t,:,:],label = "auto",color = "blue")
+        plt.plot(*out[t,:,:],label = "gt",color="orange")
+        plt.plot(*poses[t,:,0],"o",markersize = 5,color = "blue")
+        plt.plot(*out[t,:,0],"o",markersize = 5,color = "orange")
+        plt.legend()
+        plt.savefig(f"test_get_groundtruth_frame{t}_perm.png")
+
+    def test_compare_groundtruth(self):    
+        relpath = "data/2/"
+        datapath = "/Users/taigaabe/Downloads/ibl1_true_xy_all_918pm.mat"
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        out = tm.compare_groundtruth("ibl1_labeled.mp4",datapath,partperm = [1,3,0,2])
+        assert out < 41
+        assert 0 
+        
 

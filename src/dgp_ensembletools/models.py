@@ -13,6 +13,7 @@ from deepgraphpose.models.eval import plot_dgp,load_pose_from_dlc_to_dict,setup_
 from deepgraphpose.utils_model import get_train_config 
 from deeplabcut.utils import auxiliaryfunctions
 from skimage.util import img_as_ubyte
+from scipy.io import loadmat
 from tqdm import tqdm
 from pathlib import Path
 import pandas as pd
@@ -23,8 +24,10 @@ from matplotlib import pyplot as plt
 from matplotlib import animation
 from moviepy.editor import VideoFileClip,VideoClip
 from joblib import Memory
-#location = '/Volumes/TOSHIBA EXT STO/cache'
-location = "/home/ubuntu/cache"
+if os.getenv("HOME") == "/Users/taigaabe": 
+    location = '/Volumes/TOSHIBA EXT STO/cache'
+else:    
+    location = os.path.join(os.getenv,"cache")
 memory = Memory(location, verbose=0)
 
 #vars: video_name,frame_range,proj_config,shuffle,dgp_model_file,  
@@ -264,6 +267,7 @@ class Ensemble():
         plt.axis("off")        
         plt.legend() 
         return plt.gcf()
+
     def make_exampleframe(self,t,z,video_name,frame_range):    
         """
         Make an example frame showing the detections of all of the networks in the ensemble toether, as well as the median pose. 
@@ -321,7 +325,24 @@ class Ensemble():
         plt.legend() 
         return plt.gcf()
         
+    def compare_groundtruth(self,videoname,groundtruthpath,partperm = None):    
+        """Like the TrainedModel method of the same name, get the groundtruth trace and compare to each member of the ensemble + the median.   
+        :param labeled_video: Name of the video that data is provided for. 
+        :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
+        :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
+        """
+        rmses = {}
+        for modelname,model in self.models.items():
+            rmses[modelname] = model.compare_groundtruth(videoname,groundtruthpath,partperm)
+        gt = model.get_groundtruth(groundtruthpath,partperm)  
+        gtlength = len(gt)
 
+        ## Finally get the median pose:     
+        rawmedpose = self.get_median_pose(video_name,range(gtlength))    
+        medpose = np.stack(rawmedpose,axis = 1) 
+        medrmse = np.sqrt(np.mean((medpose[:len(groundtruth),:,:] - gt)**2))
+        rmses["median"] = medrmse
+        return rmses
 
 class TrainedModel():
     """Trained DGP model. Initialized by passing a model folder. Once initialized can be queried for trace data videos, etc. 
@@ -588,3 +609,38 @@ class TrainedModel():
                 dgp_model_file)
 
         return xx, yy, likes, nj, bodyparts, softmaxtensor, dlc_cfg
+
+    def get_groundtruth(self,groundtruth_path,partperm = None):
+        """Get groundtruth data. 
+
+        :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
+        """
+        groundtruth = loadmat(groundtruth_path)["true_xy"]
+        groundtruth_reordered = np.moveaxis(groundtruth,0,-1) ## move parts to the last axis. 
+        
+        if partperm is None:
+            groundtruth_permuted = groundtruth_reordered
+        else:
+            assert len(partperm) == groundtruth_reordered.shape[-1]
+            assert np.all(np.sort(partperm) == np.sort(range(len(partperm))))
+            groundtruth_permuted = groundtruth_reordered[:,:,np.array(partperm)]
+        return groundtruth_permuted
+        
+    def compare_groundtruth(self,labeled_video,groundtruth_path,partperm = None):
+        """Compare to groundtruth detected data and get rmse. Assumes that we have groundtruth for the whole sequence.  
+
+        :param labeled_video: Name of the video that data is provided for. 
+        :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
+        :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
+        """
+        video_clip = self.get_video_clip(labeled_video,None)
+        poses = self.get_poses_array(labeled_video)
+        groundtruth = self.get_groundtruth(groundtruth_path,partperm)
+
+        ## calculate rmse: 
+        rmse = np.sqrt(np.mean((poses[:len(groundtruth),:,:] - groundtruth)**2))
+
+        return rmse
+
+        
+
