@@ -335,12 +335,12 @@ class Ensemble():
         for modelname,model in self.models.items():
             rmses[modelname] = model.compare_groundtruth(videoname,groundtruthpath,partperm)
         gt = model.get_groundtruth(groundtruthpath,partperm)  
-        gtlength = len(gt)
+        gtlength = len(gt)+2
 
         ## Finally get the median pose:     
-        rawmedpose = self.get_median_pose(video_name,range(gtlength))    
+        rawmedpose = self.get_median_pose(videoname,range(gtlength))    
         medpose = np.stack(rawmedpose,axis = 1) 
-        medrmse = np.sqrt(np.mean((medpose[:len(groundtruth),:,:] - gt)**2))
+        medrmse = np.sqrt(np.mean((medpose[:len(gt),:,:] - gt)**2))
         rmses["median"] = medrmse
         return rmses
 
