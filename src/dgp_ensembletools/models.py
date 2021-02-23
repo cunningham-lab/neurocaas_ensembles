@@ -28,7 +28,11 @@ if os.getenv("HOME") == "/Users/taigaabe":
     location = '/Volumes/TOSHIBA EXT STO/cache'
 else:    
     location = os.path.join(os.getenv,"cache")
-memory = Memory(location, verbose=0)
+try:    
+    memory = Memory(location, verbose=0)
+except PermissionError:    
+    location = "./cache"
+    memory = Memory(location, verbose=0)
 
 #vars: video_name,frame_range,proj_config,shuffle,dgp_model_file,  
 def _get_poses_and_heatmap(video_path,frame_range,cfg,proj_config,shuffle,dgp_model_file):
@@ -638,9 +642,26 @@ class TrainedModel():
         groundtruth = self.get_groundtruth(groundtruth_path,partperm)
 
         ## calculate rmse: 
-        rmse = np.sqrt(np.mean((poses[:len(groundtruth),:,:] - groundtruth)**2))
+        #rmse = np.sqrt(np.mean((poses[:len(groundtruth),:,:] - groundtruth)**2))
+        rmse = self.marker_epsilon_distance(poses[:len(groundtruth),:,:],groundtruth)
 
         return rmse
 
-        
+    def marker_epsilon_distance(self,pose,gt,epsilon=0):
+        """Kelly's rmse code (for TxD) adapted to TxCxD (C = coordinate, D = part).
+
+        :param pose: the auto detected pose that we are working with. Of shape (time,xy,part)
+        :param groundtruth: the groundtruth pose that we are working with. Of shape (time,xy,part)
+        """
+        dcoord = np.sum((pose-gt)**2,axis = 1) # now TxD, the rest of the code is the same 
+        indiv_dist = np.sqrt(dcoord)
+        ## epsilon radius for distance: 
+        indiv_dist_epsilon=indiv_dist < epsilon
+        indiv_dist[indiv_dist_epsilon] = 0
+        indiv_dist2 = indiv_dist**2
+        indiv_dist2 = indiv_dist2.sum(-1)
+        num_points = np.prod(indiv_dist2.shape)
+        dist = np.sqrt(indiv_dist2.sum()/num_points)
+        #dist = np.sqrt(indiv_dist2)
+        return dist  # T
 

@@ -126,6 +126,18 @@ class Test_TrainedModel():
         tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
         out = tm.compare_groundtruth("ibl1_labeled.mp4",datapath,partperm = [1,3,0,2])
         assert out < 41
-        assert 0 
+
+    def test_marker_epsilon_distance(self):    
+        relpath = "data/2/"
+        datapath = "/Users/taigaabe/Downloads/ibl1_true_xy_all_918pm.mat"
+        videopath = "ibl1_labeled.mp4"
+
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+
+        gt = tm.get_groundtruth(datapath,partperm = [1,3,0,2])
+        poses = tm.get_poses_array(videopath)
+
+        output = tm.marker_epsilon_distance(poses[:-1],gt)
         
+
 
