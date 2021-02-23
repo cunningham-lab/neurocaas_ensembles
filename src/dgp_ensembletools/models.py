@@ -14,6 +14,7 @@ from deepgraphpose.utils_model import get_train_config
 from deeplabcut.utils import auxiliaryfunctions
 from skimage.util import img_as_ubyte
 from scipy.io import loadmat
+from scipy.special import softmax
 from tqdm import tqdm
 from pathlib import Path
 import pandas as pd
@@ -38,14 +39,16 @@ except PermissionError:
 ## Functions to smooth the heatmap detections 
 def get_mu_fix(ref_, smooth=True):
     """
-    :param ref_: should be scoremap for outputs of shape (batch size,x,y,part)
+    Given an unnoramlized scoremap, returns the  
+    :param ref_: should be unnormalized scoremap for outputs of shape (batch size,x,y,part)
 
     """
     #original thing
     n_frames, d1,d2, nj = ref_.shape
     alpha = make2dgrid_np(ref_[0,:,:,0])
     if smooth:
-        ref_y2, ref_x2 = (np.sum(alpha[:,:,:,None,None]*np.transpose(ref_,(1,2,0,3)),(1,2))/np.asarray([d2,d1])[:,None,None]) # 2 , y, x
+        softmax_ref = softmax(ref_,(1,2)) ## use the softmax here. 
+        ref_y2, ref_x2 = (np.sum(alpha[:,:,:,None,None]*np.transpose(softmax_ref,(1,2,0,3)),(1,2))/np.asarray([d2,d1])[:,None,None]) # 2 , y, x
     else:
         ref_x2 = np.zeros((n_frames, nj))*np.nan#np.empty_like(xr)
         ref_y2 =  np.zeros((n_frames, nj))*np.nan#np.empty_like(yr)
@@ -58,6 +61,7 @@ def make2dgrid_np(ref_c):
     d1, d2 = ref_c.shape
     x_i = np.arange(d1)*d2
     y_i = np.arange(d2)*d1
+    ## These are multiplied by the other coordinate in order to ease calculation of the expectation later. 
     xg, yg = np.meshgrid(x_i, y_i)
     alpha = np.array([xg, yg]).swapaxes(1, 2)  # 2 x nx_out x ny_out
     return alpha
@@ -191,36 +195,77 @@ class Ensemble():
         for model in self.models:
             xx,yy,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_info(video_name,frame_range,snapshot,shuffle)
 
-    def get_mean_pose(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1,smooth = True):
-        """Gets the scoremaps across the ensemble for this frame range of this video at this snapshot, and calculates the mean pose from it.  
-        NOTE: passing frame_range(0,2) will give 1 frame, not 2 as you would expect.  
-        TODO: Write test for this.  
-        :param video_name:
-        :param frame_range:
-        :param snapshot:
-        :param shuffle:
+## Apply the same changes as you did with the median below. 
+    #def get_mean_pose(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1,smooth = True):
+    #    """Gets the scoremaps across the ensemble for this frame range of this video at this snapshot, and calculates the mean pose from it.  
+    #    NOTE: passing frame_range(0,2) will give 1 frame, not 2 as you would expect.  
+    #    TODO: Write test for this.  
+    #    :param video_name:
+    #    :param frame_range:
+    #    :param snapshot:
+    #    :param shuffle:
+
+    #    """
+    #    softmaxtensors = []
+    #    for i in range(len(self.models)):
+    #        model = self.models[i]
+    #        xr,yr,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_cache(video_name,frame_range,snapshot,shuffle)
+    #        softmaxtensors.append(softmaxtensor)    
+    #    ref_ = np.mean(softmaxtensors,0)    
+    #    ref_x,ref_y = get_mu_fix(ref_,smooth = True)
+    #    #ref_x = np.empty_like(xr)
+    #    #ref_y = np.empty_like(yr)
+    #    #len_range = len(frame_range)-1 ## just index relative to the subclip. Strangely moviepy returns len(framerange) -1 frames...
+    #    #for nt0 in range(len_range):
+    #    #    for njj0 in range(nj):
+    #    #        ref_y[nt0,njj0], ref_x[nt0,njj0] = np.unravel_index(np.argmax(ref_[nt0,:,:,njj0]), ref_.shape[1:3])
+    #    ref_x = ref_x* dlc_cfg.stride + 0.5 * dlc_cfg.stride
+    #    ref_y = ref_y* dlc_cfg.stride + 0.5 * dlc_cfg.stride
+    #    print("scaling refs.")
+    #            
+    #    return ref_x,ref_y
+
+    def get_scoremaps(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
+        """Get scoremaps (unnormalized likelihoods) from the convnet output. Return these and additionally normalized softmax tensors.
 
         """
-        softmaxtensors = []
+        scmaps = []
         for i in range(len(self.models)):
             model = self.models[i]
-            xr,yr,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_cache(video_name,frame_range,snapshot,shuffle)
-            softmaxtensors.append(softmaxtensor)    
-        ref_ = np.mean(softmaxtensors,0)    
-        ref_x,ref_y = get_mu_fix(ref_,smooth = True)
-        #ref_x = np.empty_like(xr)
-        #ref_y = np.empty_like(yr)
-        #len_range = len(frame_range)-1 ## just index relative to the subclip. Strangely moviepy returns len(framerange) -1 frames...
-        #for nt0 in range(len_range):
-        #    for njj0 in range(nj):
-        #        ref_y[nt0,njj0], ref_x[nt0,njj0] = np.unravel_index(np.argmax(ref_[nt0,:,:,njj0]), ref_.shape[1:3])
-        ref_x = ref_x* dlc_cfg.stride + 0.5 * dlc_cfg.stride
-        ref_y = ref_y* dlc_cfg.stride + 0.5 * dlc_cfg.stride
-        print("scaling refs.")
-                
-        return ref_x,ref_y
+            xr,yr,likes,nj,bodyparts,scmap,dlc_cfg = model.get_poses_and_heatmap_cache(video_name,frame_range,snapshot,shuffle)
+            scmaps.append(scmap)
+        return scmaps    
+
+    def get_logistic(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
+        """ Get standard logistic transformation of scoremaps. 
+
+        """
+        softmax_tensors = []
+        scmaps = self.get_scoremaps(video_name,frame_range,snapshot,shuffle)
+        for scmap_ in scmaps:
+            softmax_tensors.append(np.exp(scmap_)/(np.exp(scmap_)+1))
+        return softmax_tensors    
+
+    def get_median_scoremap(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
+        """Gets the median scoremap. First collects a group of scoremaps, then takes the softmax of each, applies the median, and then transforms back into the scoremap. This is necessary to then pass this scoremap into the smoothing function.   
+
+        """
+        logistic_tensors = self.get_logistic(video_name,frame_range,snapshot,shuffle)
+        median_logistic = np.median(logistic_tensors,0)
+        median_scoremap = np.log(median_logistic) - np.log(1-median_logistic)
+        return median_scoremap
+
+    def get_mean_scoremap(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
+        """Gets the median scoremap. First collects a group of scoremaps, then takes the softmax of each, applies the median, and then transforms back into the scoremap. This is necessary to then pass this scoremap into the smoothing function.   
+
+        """
+        logistic_tensors = self.get_logistic(video_name,frame_range,snapshot,shuffle)
+        mean_logistic = np.mean(logistic_tensors,0)
+        mean_scoremap = np.log(mean_logistic) - np.log(1-mean_logistic)
+        return mean_scoremap
 
     def get_median_pose(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
+
         """Gets the scoremaps across the ensemble for this frame range of this video at this snapshot, and calculates the median pose from it.  
         NOTE: passing frame_range(0,2) will give 1 frame, not 2 as you would expect. 
         :param video_name:
@@ -229,19 +274,37 @@ class Ensemble():
         :param shuffle:
 
         """
-        softmaxtensors = []
         for i in range(len(self.models)):
             model = self.models[i]
-            xr,yr,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_cache(video_name,frame_range,snapshot,shuffle)
-            softmaxtensors.append(softmaxtensor)    
-        ref_ = np.median(softmaxtensors,0)    
-        ref_x,ref_y = get_mu_fix(ref_,smooth = False)
-        #ref_x = np.empty_like(xr)
-        #ref_y = np.empty_like(yr)
-        #len_range = len(frame_range)-1 ## just index relative to the subclip. Strangely moviepy returns len(framerange) -1 frames...
-        #for nt0 in range(len_range):
-        #    for njj0 in range(nj):
-        #        ref_y[nt0,njj0], ref_x[nt0,njj0] = np.unravel_index(np.argmax(ref_[nt0,:,:,njj0]), ref_.shape[1:3])
+            xr,yr,likes,nj,bodyparts,scmap,dlc_cfg = model.get_poses_and_heatmap_cache(video_name,frame_range,snapshot,shuffle)
+
+        ref_ = self.get_median_scoremap(video_name,frame_range,snapshot,shuffle)
+
+        ref_x,ref_y = get_mu_fix(ref_,smooth = True)
+
+        ref_x = ref_x* dlc_cfg.stride + 0.5 * dlc_cfg.stride
+        ref_y = ref_y* dlc_cfg.stride + 0.5 * dlc_cfg.stride
+                
+        return ref_x,ref_y
+
+    def get_mean_pose(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
+
+        """Gets the scoremaps across the ensemble for this frame range of this video at this snapshot, and calculates the median pose from it.  
+        NOTE: passing frame_range(0,2) will give 1 frame, not 2 as you would expect. 
+        :param video_name:
+        :param frame_range:
+        :param snapshot:
+        :param shuffle:
+
+        """
+        for i in range(len(self.models)):
+            model = self.models[i]
+            xr,yr,likes,nj,bodyparts,scmap,dlc_cfg = model.get_poses_and_heatmap_cache(video_name,frame_range,snapshot,shuffle)
+
+        ref_ = self.get_mean_scoremap(video_name,frame_range,snapshot,shuffle)
+
+        ref_x,ref_y = get_mu_fix(ref_,smooth = True)
+
         ref_x = ref_x* dlc_cfg.stride + 0.5 * dlc_cfg.stride
         ref_y = ref_y* dlc_cfg.stride + 0.5 * dlc_cfg.stride
         print("scaling refs.")
@@ -373,9 +436,9 @@ class Ensemble():
         gt = model.get_groundtruth(groundtruthpath,partperm)  
         gtlength = len(gt)+2
 
-        ## Finally get the median pose:     
+        ## Finally get the mean pose:     
 
-        rawmedpose = self.get_median_pose(videoname,range(gtlength))    
+        rawmedpose = self.get_mean_pose(videoname,range(gtlength))    
         medpose = np.stack(rawmedpose,axis = 1) 
         medrmse = model.marker_epsilon_distance(medpose[:len(gt),:,:],gt)        
         #medrmse = np.sqrt(np.mean((medpose[:len(gt),:,:] - gt)**2))

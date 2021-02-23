@@ -1,9 +1,12 @@
 ## Test per-model code. 
+import logging
 import numpy as np
 import pytest
 import matplotlib.pyplot as plt
 import dgp_ensembletools.models
 import os
+
+logging.basicConfig(level = logging.DEBUG)
 
 loc = os.path.abspath(os.path.dirname(__file__))
 
@@ -28,11 +31,29 @@ class Test_Ensemble():
         ens = dgp_ensembletools.models.Ensemble(topdir,modeldirs,ext="mp4")
         fig = ens.make_exampleframe(75,4,"ibl1_labeled.mp4",range(0,1000))
         fig.savefig("./test{}frame.png".format(75))
+    def test_get_scoremaps(self):
+        topdir = os.path.join(loc,"../","data")
+        modeldirs = ["{}".format(i+1) for i in range(1)]
+        ens = dgp_ensembletools.models.Ensemble(topdir,modeldirs,ext="mp4")
+        scmaps = ens.get_scoremaps("ibl1_labeled.mp4",range(0,4))
+        logging.debug(scmaps)
+    def test_get_softmax(self):   
+        topdir = os.path.join(loc,"../","data")
+        modeldirs = ["{}".format(i+1) for i in range(1)]
+        ens = dgp_ensembletools.models.Ensemble(topdir,modeldirs,ext="mp4")
+        softmax = ens.get_softmax("ibl1_labeled.mp4",range(0,4))
+        for s in softmax:
+            assert np.all(s<=1) and np.all(s>=0)
+        logging.debug(softmax)
+        
     def test_get_median_pose(self):
         topdir = os.path.join(loc,"../","data")
         modeldirs = ["{}".format(i+1) for i in range(1)]
         ens = dgp_ensembletools.models.Ensemble(topdir,modeldirs,ext="mp4")
         med = ens.get_median_pose("ibl1_labeled.mp4",range(0,4))
+        print(med)
+        logging.debug(med)
+        assert 0 
 
 
 class Test_TrainedModel():
