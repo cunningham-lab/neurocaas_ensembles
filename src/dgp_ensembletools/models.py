@@ -27,7 +27,7 @@ from joblib import Memory
 if os.getenv("HOME") == "/Users/taigaabe": 
     location = '/Volumes/TOSHIBA EXT STO/cache'
 else:    
-    location = os.path.join(os.getenv,"cache")
+    location = os.path.join(os.getenv("HOME"),"cache")
 try:    
     memory = Memory(location, verbose=0)
 except PermissionError:    
