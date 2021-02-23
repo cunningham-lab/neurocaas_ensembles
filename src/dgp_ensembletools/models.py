@@ -37,6 +37,10 @@ except PermissionError:
 
 ## Functions to smooth the heatmap detections 
 def get_mu_fix(ref_, smooth=True):
+    """
+    :param ref_: should be scoremap for outputs of shape (batch size,x,y,part)
+
+    """
     #original thing
     n_frames, d1,d2, nj = ref_.shape
     alpha = make2dgrid_np(ref_[0,:,:,0])
@@ -231,7 +235,7 @@ class Ensemble():
             xr,yr,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_cache(video_name,frame_range,snapshot,shuffle)
             softmaxtensors.append(softmaxtensor)    
         ref_ = np.median(softmaxtensors,0)    
-        ref_x,ref_y = get_mu_fix(ref_,smooth = True)
+        ref_x,ref_y = get_mu_fix(ref_,smooth = False)
         #ref_x = np.empty_like(xr)
         #ref_y = np.empty_like(yr)
         #len_range = len(frame_range)-1 ## just index relative to the subclip. Strangely moviepy returns len(framerange) -1 frames...
