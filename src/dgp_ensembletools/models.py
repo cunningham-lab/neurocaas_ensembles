@@ -424,15 +424,17 @@ class Ensemble():
         plt.legend() 
         return plt.gcf()
         
-    def compare_groundtruth(self,videoname,groundtruthpath,partperm = None):    
+    def compare_groundtruth(self,videoname,groundtruthpath,partperm = None,indices = None):    
         """Like the TrainedModel method of the same name, get the groundtruth trace and compare to each member of the ensemble + the median.   
         :param labeled_video: Name of the video that data is provided for. 
         :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
         :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
+        :param indices: a numpy array of indices to run this comparison for. 
         """
         rmses = {}
         for modelname,model in self.models.items():
-            rmses[modelname] = model.compare_groundtruth(videoname,groundtruthpath,partperm)
+            rmses[modelname] = model.compare_groundtruth(videoname,groundtruthpath,partperm,indices = indices)
+        ## Use the last model to calculate this (no dependencies on that model's params that aren't general to the ensemble. )    
         gt = model.get_groundtruth(groundtruthpath,partperm)  
         gtlength = len(gt)+2
 
@@ -440,8 +442,10 @@ class Ensemble():
 
         rawmedpose = self.get_mean_pose(videoname,range(gtlength))    
         medpose = np.stack(rawmedpose,axis = 1) 
-        medrmse = model.marker_epsilon_distance(medpose[:len(gt),:,:],gt)        
-        #medrmse = np.sqrt(np.mean((medpose[:len(gt),:,:] - gt)**2))
+        if indices is None:
+            medrmse = model.marker_epsilon_distance(medpose[:len(gt),:,:],gt)        
+        else:    
+            medrmse = model.marker_epsilon_distance(medpose[indices,:,:],gt[indices,:,:])        
         rmses["median"] = medrmse
         return rmses
 
@@ -727,8 +731,8 @@ class TrainedModel():
             groundtruth_permuted = groundtruth_reordered[:,:,np.array(partperm)]
         return groundtruth_permuted
         
-    def compare_groundtruth(self,labeled_video,groundtruth_path,partperm = None):
-        """Compare to groundtruth detected data and get rmse. Assumes that we have groundtruth for the whole sequence.  
+    def compare_groundtruth(self,labeled_video,groundtruth_path,partperm = None,indices = None):
+        """Compare to groundtruth detected data and get rmse. Assumes that we have groundtruth for the whole sequence unless indices are explicitly provided. 
 
         :param labeled_video: Name of the video that data is provided for. 
         :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
@@ -740,7 +744,11 @@ class TrainedModel():
 
         ## calculate rmse: 
         #rmse = np.sqrt(np.mean((poses[:len(groundtruth),:,:] - groundtruth)**2))
-        rmse = self.marker_epsilon_distance(poses[:len(groundtruth),:,:],groundtruth)
+        if indices == None:
+            rmse = self.marker_epsilon_distance(poses[:len(groundtruth),:,:],groundtruth)
+        else:    
+            assert type(indices) = np.ndarray
+            rmse = self.marker_epsilon_distance(poses[indices,:,:],groundtruth[indices,:,:])
 
         return rmse
 
