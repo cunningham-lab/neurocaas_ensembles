@@ -446,6 +446,7 @@ class Ensemble():
             medrmse = model.marker_epsilon_distance(medpose[:len(gt),:,:],gt)        
         else:    
             medrmse = model.marker_epsilon_distance(medpose[indices,:,:],gt[indices,:,:])        
+            print(medpose[indices,:,:].shape)
         rmses["median"] = medrmse
         return rmses
 
@@ -744,10 +745,10 @@ class TrainedModel():
 
         ## calculate rmse: 
         #rmse = np.sqrt(np.mean((poses[:len(groundtruth),:,:] - groundtruth)**2))
-        if indices == None:
+        if indices is None:
             rmse = self.marker_epsilon_distance(poses[:len(groundtruth),:,:],groundtruth)
         else:    
-            assert type(indices) = np.ndarray
+            assert type(indices) == np.ndarray
             rmse = self.marker_epsilon_distance(poses[indices,:,:],groundtruth[indices,:,:])
 
         return rmse
