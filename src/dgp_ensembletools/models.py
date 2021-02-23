@@ -34,6 +34,30 @@ except PermissionError:
     location = "./cache"
     memory = Memory(location, verbose=0)
 
+
+## Functions to smooth the heatmap detections 
+def get_mu_fix(ref_, smooth=True):
+    #original thing
+    n_frames, d1,d2, nj = ref_.shape
+    alpha = make2dgrid_np(ref_[0,:,:,0])
+    if smooth:
+        ref_y2, ref_x2 = (np.sum(alpha[:,:,:,None,None]*np.transpose(ref_,(1,2,0,3)),(1,2))/np.asarray([d2,d1])[:,None,None]) # 2 , y, x
+    else:
+        ref_x2 = np.zeros((n_frames, nj))*np.nan#np.empty_like(xr)
+        ref_y2 =  np.zeros((n_frames, nj))*np.nan#np.empty_like(yr)
+        for nt0 in range(n_frames):
+            for njj0 in range(nj):
+                ref_y2[nt0,njj0], ref_x2[nt0,njj0] = np.unravel_index(np.argmax(ref_[nt0,:,:,njj0]), ref_.shape[1:3])
+    return ref_x2, ref_y2
+
+def make2dgrid_np(ref_c):
+    d1, d2 = ref_c.shape
+    x_i = np.arange(d1)*d2
+    y_i = np.arange(d2)*d1
+    xg, yg = np.meshgrid(x_i, y_i)
+    alpha = np.array([xg, yg]).swapaxes(1, 2)  # 2 x nx_out x ny_out
+    return alpha
+
 #vars: video_name,frame_range,proj_config,shuffle,dgp_model_file,  
 def _get_poses_and_heatmap(video_path,frame_range,cfg,proj_config,shuffle,dgp_model_file):
     """Internal function to get poses and heatmap to access cache.
@@ -163,7 +187,7 @@ class Ensemble():
         for model in self.models:
             xx,yy,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_info(video_name,frame_range,snapshot,shuffle)
 
-    def get_mean_pose(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
+    def get_mean_pose(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1,smooth = True):
         """Gets the scoremaps across the ensemble for this frame range of this video at this snapshot, and calculates the mean pose from it.  
         NOTE: passing frame_range(0,2) will give 1 frame, not 2 as you would expect.  
         TODO: Write test for this.  
@@ -179,14 +203,16 @@ class Ensemble():
             xr,yr,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_cache(video_name,frame_range,snapshot,shuffle)
             softmaxtensors.append(softmaxtensor)    
         ref_ = np.mean(softmaxtensors,0)    
-        ref_x = np.empty_like(xr)
-        ref_y = np.empty_like(yr)
-        len_range = len(frame_range)-1 ## just index relative to the subclip. Strangely moviepy returns len(framerange) -1 frames...
-        for nt0 in range(len_range):
-            for njj0 in range(nj):
-                ref_y[nt0,njj0], ref_x[nt0,njj0] = np.unravel_index(np.argmax(ref_[nt0,:,:,njj0]), ref_.shape[1:3])
+        ref_x,ref_y = get_mu_fix(ref_,smooth = True)
+        #ref_x = np.empty_like(xr)
+        #ref_y = np.empty_like(yr)
+        #len_range = len(frame_range)-1 ## just index relative to the subclip. Strangely moviepy returns len(framerange) -1 frames...
+        #for nt0 in range(len_range):
+        #    for njj0 in range(nj):
+        #        ref_y[nt0,njj0], ref_x[nt0,njj0] = np.unravel_index(np.argmax(ref_[nt0,:,:,njj0]), ref_.shape[1:3])
         ref_x = ref_x* dlc_cfg.stride + 0.5 * dlc_cfg.stride
         ref_y = ref_y* dlc_cfg.stride + 0.5 * dlc_cfg.stride
+        print("scaling refs.")
                 
         return ref_x,ref_y
 
@@ -205,14 +231,16 @@ class Ensemble():
             xr,yr,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_cache(video_name,frame_range,snapshot,shuffle)
             softmaxtensors.append(softmaxtensor)    
         ref_ = np.median(softmaxtensors,0)    
-        ref_x = np.empty_like(xr)
-        ref_y = np.empty_like(yr)
-        len_range = len(frame_range)-1 ## just index relative to the subclip. Strangely moviepy returns len(framerange) -1 frames...
-        for nt0 in range(len_range):
-            for njj0 in range(nj):
-                ref_y[nt0,njj0], ref_x[nt0,njj0] = np.unravel_index(np.argmax(ref_[nt0,:,:,njj0]), ref_.shape[1:3])
+        ref_x,ref_y = get_mu_fix(ref_,smooth = True)
+        #ref_x = np.empty_like(xr)
+        #ref_y = np.empty_like(yr)
+        #len_range = len(frame_range)-1 ## just index relative to the subclip. Strangely moviepy returns len(framerange) -1 frames...
+        #for nt0 in range(len_range):
+        #    for njj0 in range(nj):
+        #        ref_y[nt0,njj0], ref_x[nt0,njj0] = np.unravel_index(np.argmax(ref_[nt0,:,:,njj0]), ref_.shape[1:3])
         ref_x = ref_x* dlc_cfg.stride + 0.5 * dlc_cfg.stride
         ref_y = ref_y* dlc_cfg.stride + 0.5 * dlc_cfg.stride
+        print("scaling refs.")
                 
         return ref_x,ref_y
 
@@ -342,9 +370,11 @@ class Ensemble():
         gtlength = len(gt)+2
 
         ## Finally get the median pose:     
+
         rawmedpose = self.get_median_pose(videoname,range(gtlength))    
         medpose = np.stack(rawmedpose,axis = 1) 
-        medrmse = np.sqrt(np.mean((medpose[:len(gt),:,:] - gt)**2))
+        medrmse = model.marker_epsilon_distance(medpose[:len(gt),:,:],gt)        
+        #medrmse = np.sqrt(np.mean((medpose[:len(gt),:,:] - gt)**2))
         rmses["median"] = medrmse
         return rmses
 
