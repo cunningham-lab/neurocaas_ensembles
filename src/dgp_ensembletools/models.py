@@ -1,4 +1,4 @@
-## Code to handle trained dgp models.  
+# Code to handle trained dgp models.  
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 from tensorflow.python.util import deprecation
@@ -191,10 +191,10 @@ class Ensemble():
             self.ensembledict[video_name] = {"run{}".format(ind):self.models[ind].get_poses_array(video_name) for ind,model in self.models.items()}
         return self.ensembledict[video_name]
 
-    def get_scoremaps(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
-        for model in self.models:
-            xx,yy,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_info(video_name,frame_range,snapshot,shuffle)
-
+#    def get_scoremaps(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
+#        for model in self.models:
+#            xx,yy,likes,nj,bodyparts,softmaxtensor,dlc_cfg = model.get_poses_and_heatmap_info(video_name,frame_range,snapshot,shuffle)
+#
 ## Apply the same changes as you did with the median below. 
     #def get_mean_pose(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1,smooth = True):
     #    """Gets the scoremaps across the ensemble for this frame range of this video at this snapshot, and calculates the mean pose from it.  
@@ -380,7 +380,7 @@ class Ensemble():
         ensemble_pose = {}
         for key,p in poses.items():
             ensemble_pose[key] = p[frame_range,:,:]
-        rawpose = self.get_median_pose(video_name,range(t,t+2))    
+        rawpose = self.get_mean_pose(video_name,range(t,t+2))    
         medpose = np.stack(rawpose,axis = 1) 
 
         clip = self.get_video_clip(video_name,frame_range)    
@@ -392,7 +392,7 @@ class Ensemble():
                             "o",
                             markersize = 4,
                             marker = markers[part],
-                            linestyle = None,
+                            linestyle = "None",
                             color = colors[i],
                             label = "run{}".format(i),
                             alpha = 0.5)
@@ -401,7 +401,7 @@ class Ensemble():
                             "o",
                             markersize = 4,
                             marker = markers[part],
-                            linestyle = None,
+                            linestyle = "None",
                             color = colors[i],
                             alpha = 0.5)
         for part in range(ensemble_pose["run{}".format(i)].shape[-1]):
@@ -411,7 +411,7 @@ class Ensemble():
                         linestyle = 'None',
                         markersize = 5,
                         marker = markers[part],
-                        label = "median",
+                        label = "consensus",
                         color = colors[-1])
             else:    
                 plt.plot(*medpose[0,:,part],
@@ -421,7 +421,7 @@ class Ensemble():
                         marker = markers[part],
                         color = colors[-1])
         plt.axis("off")        
-        plt.legend() 
+        plt.legend(numpoints =1) 
         return plt.gcf()
         
     def compare_groundtruth(self,videoname,groundtruthpath,partperm = None,indices = None):    
@@ -463,9 +463,52 @@ class TrainedModel():
         """
         self.project_dir = Path(projectfolder)
         self.ext = ext
+        self.load_videos()
+        self.change_project_path()
+
+    def load_videos(self):    
+        """Reloads the list of videos and label files from the file system. 
+
+        """
         self.pred_video_files = os.listdir(self.project_dir/"videos_pred")
         self.pred_videos = [video_file_ for video_file_ in self.pred_video_files if self.ext in video_file_]
         self.label_files = [video_file_ for video_file_ in self.pred_video_files if '.csv' in video_file_]
+
+    def change_project_path(self):    
+        yamlpath = os.path.join(self.project_dir,"config.yaml")
+        with open(yamlpath,"r") as f:
+            output = yaml.safe_load(f)
+        video_sets_trunc = {}    
+        for k,v in output["video_sets"].items():
+            trunc_path = k.split(os.path.join(output["project_path"],""))[-1]
+            video_sets_trunc[os.path.join(self.project_dir,trunc_path)] = v
+        output["project_path"] = str(self.project_dir)
+        output["video_sets"] = video_sets_trunc
+        with open(yamlpath,"w") as f:
+            yaml.dump(output,f)
+
+    def predict(self,video_name,snapshot = "snapshot-step2-final--0",shuffle = 1):
+        """Performs prediction with this model onto the given video. 
+
+        """
+        video_dir = os.path.join(self.project_dir,"videos_pred")
+        video_path = os.path.join(video_dir,video_name)
+
+        print('Collecting markers from snapshot:')
+        print(snapshot)
+        print('\n')
+
+        #full_video_clip = self.get_video_clip(video_path,None)
+        #fps = full_video_clip.fps
+        snapshot_path, cfg_yaml = get_snapshot_path(snapshot, self.project_dir, shuffle=shuffle)
+        print(cfg_yaml)
+        plot_dgp(str(video_path),
+                str(video_dir),
+                proj_cfg_file = str(cfg_yaml),
+                dgp_model_file = str(snapshot_path),
+                shuffle = shuffle)
+
+        self.load_videos()
 
     def get_poses_raw(self,video_name):    
         """Gets the pose for a video that has been predicted on. 
