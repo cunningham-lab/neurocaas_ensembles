@@ -793,26 +793,30 @@ class TrainedModel():
         :param labeled_video: Name of the video that data is provided for. 
         :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
         :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
-        :param parts: the parts we should include when computing the groundtruth. Indexed via the parts in the ensemble pose detections. Must be given as a 1d numpy array.  
+        :param parts: the parts we should include when computing the groundtruth. Indexed via the parts in the ensemble pose detections, not the groundtruth. Must be given as a 1d numpy array.  
         """
         video_clip = self.get_video_clip(labeled_video,None)
         poses = self.get_poses_array(labeled_video)
         groundtruth = self.get_groundtruth(groundtruth_path,partperm)
         if parts is None:
-            parts 
+            parts = np.array(np.arange(groundtruth.shape[-1]))
+        else:    
+            assert type(parts) == np.ndarray
+            assert len(parts.shape) == 1
+
 
         ## calculate rmse: 
         #rmse = np.sqrt(np.mean((poses[:len(groundtruth),:,:] - groundtruth)**2))
         if indices is None:
-            rmse = self.marker_epsilon_distance(poses[:len(groundtruth),:,:],groundtruth)
+            rmse = self.marker_epsilon_distance(poses[:len(groundtruth),:,parts],groundtruth[:,:,parts])
         else:    
             assert type(indices) == np.ndarray
-            rmse = self.marker_epsilon_distance(poses[indices,:,:],groundtruth[indices,:,:])
+            rmse = self.marker_epsilon_distance(poses[indices,:,parts],groundtruth[indices,:,parts])
 
         return rmse
 
     def marker_epsilon_distance(self,pose,gt,epsilon=0):
-        """Kelly's rmse code (for TxD) adapted to TxCxD (C = coordinate, D = part).
+        """Kelly's rmse code (for TxD) adapted to TxCxD (C = coordinate, D = part). Check this with kelly code again. 
 
         :param pose: the auto detected pose that we are working with. Of shape (time,xy,part)
         :param groundtruth: the groundtruth pose that we are working with. Of shape (time,xy,part)
@@ -823,9 +827,9 @@ class TrainedModel():
         indiv_dist_epsilon=indiv_dist < epsilon
         indiv_dist[indiv_dist_epsilon] = 0
         indiv_dist2 = indiv_dist**2
-        indiv_dist2 = indiv_dist2.sum(-1)
-        num_points = np.prod(indiv_dist2.shape)
-        dist = np.sqrt(indiv_dist2.sum()/num_points)
+        indiv_dist2 = indiv_dist2.sum(-1) # squared error per frame. 
+        num_points = np.prod(indiv_dist2.shape) ## number of timepoints
+        dist = np.sqrt(indiv_dist2.sum()/num_points) ## root mean square error. 
         #dist = np.sqrt(indiv_dist2)
         return dist  # T
 
