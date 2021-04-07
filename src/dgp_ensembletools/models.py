@@ -158,15 +158,16 @@ class Ensemble():
     :param topdir: top level directory where we will work with this ensemble.
     :param modeldirs: list of model directory names within topdir (will be parsed as os.path.join(topdir,modeldir[i]))
     :param ext: video file extension we care about.
+    :param memory: location of joblib cache. By default, is the location declared at the top of this module. If set to None, will not save to the cache.  
 
     """
-    def __init__(self,topdir,modeldirs,ext):
+    def __init__(self,topdir,modeldirs,ext,memory = memory):
         self.topdir = topdir
         self.modeldirs = modeldirs
         self.modelpaths = [os.path.abspath(os.path.join(self.topdir,self.modeldirs[i])) for i in range(len(self.modeldirs))]
         for mp in self.modelpaths:
             assert os.path.exists(mp) , f"dir {mp} does not exist."
-        self.models = {mi:TrainedModel(mp,ext) for mi,mp in enumerate(self.modelpaths)}
+        self.models = {mi:TrainedModel(mp,ext,memory = memory) for mi,mp in enumerate(self.modelpaths)}
         self.ensembledict = {}
 
     def get_video_clip(self,video_name,frame_range,modelindex = 0):    
@@ -455,9 +456,10 @@ class TrainedModel():
 
     :param projectfolder: path to project this model is initialized from. 
     :param ext: file extension for videos (e.g. avi, mp4)
+    :param memory: location of joblib cache. By default, is the location declared at the top of this module. If set to None, will not save to the cache.  
 
     """
-    def __init__(self,projectfolder,ext):
+    def __init__(self,projectfolder,ext,memory = memory):
         """Initializes with a project folder, and associates the relevant video files.
 
         """
@@ -465,6 +467,7 @@ class TrainedModel():
         self.ext = ext
         self.load_videos()
         self.change_project_path()
+        self.memory = memory
 
     def load_videos(self):    
         """Reloads the list of videos and label files from the file system. 
@@ -749,13 +752,22 @@ class TrainedModel():
         #vars: video_name,frame_range,proj_config,shuffle,dgp_model_file,  
         #def _get_poses_and_heatmap(video_path,frame_range,proj_config,shuffle,dgp_model_file):
         video_path = os.path.join(self.project_dir,"videos_pred",video_name)
-        cached_heatmap_compute = memory.cache(_get_poses_and_heatmap)
-        xx, yy, likes, nj, bodyparts, softmaxtensor, dlc_cfg = cached_heatmap_compute(video_path,
-                frame_range,
-                cfg,
-                proj_config,
-                shuffle,
-                dgp_model_file)
+        if self.memory is not None:
+            cached_heatmap_compute = self.memory.cache(_get_poses_and_heatmap)
+            xx, yy, likes, nj, bodyparts, softmaxtensor, dlc_cfg = cached_heatmap_compute(video_path,
+                    frame_range,
+                    cfg,
+                    proj_config,
+                    shuffle,
+                    dgp_model_file)
+        else:
+            xx, yy, likes, nj, bodyparts, softmaxtensor, dlc_cfg = _get_poses_and_heatmap(video_path,
+                    frame_range,
+                    cfg,
+                    proj_config,
+                    shuffle,
+                    dgp_model_file)
+
 
         return xx, yy, likes, nj, bodyparts, softmaxtensor, dlc_cfg
 
