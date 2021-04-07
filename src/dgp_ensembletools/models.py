@@ -787,16 +787,19 @@ class TrainedModel():
             groundtruth_permuted = groundtruth_reordered[:,:,np.array(partperm)]
         return groundtruth_permuted
         
-    def compare_groundtruth(self,labeled_video,groundtruth_path,partperm = None,indices = None):
+    def compare_groundtruth(self,labeled_video,groundtruth_path,partperm = None,indices = None,parts=None):
         """Compare to groundtruth detected data and get rmse. Assumes that we have groundtruth for the whole sequence unless indices are explicitly provided. 
 
         :param labeled_video: Name of the video that data is provided for. 
         :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
         :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
+        :param parts: the parts we should include when computing the groundtruth. Indexed via the parts in the ensemble pose detections. Must be given as a 1d numpy array.  
         """
         video_clip = self.get_video_clip(labeled_video,None)
         poses = self.get_poses_array(labeled_video)
         groundtruth = self.get_groundtruth(groundtruth_path,partperm)
+        if parts is None:
+            parts 
 
         ## calculate rmse: 
         #rmse = np.sqrt(np.mean((poses[:len(groundtruth),:,:] - groundtruth)**2))
