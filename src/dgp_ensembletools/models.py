@@ -425,28 +425,30 @@ class Ensemble():
         plt.legend(numpoints =1) 
         return plt.gcf()
         
-    def compare_groundtruth(self,videoname,groundtruthpath,partperm = None,indices = None):    
+    def compare_groundtruth(self,videoname,groundtruthpath,partperm = None,indices = None,parts = None):    
         """Like the TrainedModel method of the same name, get the groundtruth trace and compare to each member of the ensemble + the median.   
         :param labeled_video: Name of the video that data is provided for. 
         :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
         :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
         :param indices: a numpy array of indices to run this comparison for. 
+        :param parts: the parts we should include when computing the groundtruth. Indexed via the parts in the ensemble pose detections, not the groundtruth. Must be given as a 1d numpy array.  
         """
         rmses = {}
         for modelname,model in self.models.items():
-            rmses[modelname] = model.compare_groundtruth(videoname,groundtruthpath,partperm,indices = indices)
+            rmses[modelname] = model.compare_groundtruth(videoname,groundtruthpath,partperm,indices = indices,parts = parts)
         ## Use the last model to calculate this (no dependencies on that model's params that aren't general to the ensemble. )    
         gt = model.get_groundtruth(groundtruthpath,partperm)  
-        gtlength = len(gt)+2
+        gtlength = len(gt)+1
 
         ## Finally get the mean pose:     
 
         rawmedpose = self.get_mean_pose(videoname,range(gtlength))    
         medpose = np.stack(rawmedpose,axis = 1) 
         if indices is None:
-            medrmse = model.marker_epsilon_distance(medpose[:len(gt),:,:],gt)        
+            medrmse = model.marker_epsilon_distance(medpose[:len(gt),:,parts],gt)        
         else:    
-            medrmse = model.marker_epsilon_distance(medpose[indices,:,:],gt[indices,:,:])        
+            medpose_reshaped = medpose[indices[:,None,None],np.array([0,1])[:,None],parts] ## a pain to reshape for missing parts...
+            medrmse = model.marker_epsilon_distance(medpose_reshaped,gt[indices,:,:])        
             print(medpose[indices,:,:].shape)
         rmses["median"] = medrmse
         return rmses
@@ -808,10 +810,11 @@ class TrainedModel():
         ## calculate rmse: 
         #rmse = np.sqrt(np.mean((poses[:len(groundtruth),:,:] - groundtruth)**2))
         if indices is None:
-            rmse = self.marker_epsilon_distance(poses[:len(groundtruth),:,parts],groundtruth[:,:,parts])
+            rmse = self.marker_epsilon_distance(poses[:len(groundtruth),:,parts],groundtruth)
         else:    
             assert type(indices) == np.ndarray
-            rmse = self.marker_epsilon_distance(poses[indices,:,parts],groundtruth[indices,:,parts])
+            poses_reshaped = poses[indices[:,None,None],np.array([0,1])[:,None],parts] ## a pain to reshape for missing parts...
+            rmse = self.marker_epsilon_distance(poses_reshaped,groundtruth[indices,:,:])
 
         return rmse
 
