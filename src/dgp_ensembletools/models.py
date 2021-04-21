@@ -20,6 +20,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import matplotlib
+import shutil
 #matplotlib.use('Agg',warn=False, force=True)
 from matplotlib import pyplot as plt
 from matplotlib import animation
@@ -490,12 +491,22 @@ class TrainedModel():
         with open(yamlpath,"w") as f:
             yaml.dump(output,f)
 
-    def predict(self,video_name,snapshot = "snapshot-step2-final--0",shuffle = 1):
+    def predict(self,orig_video_path,snapshot = "snapshot-step2-final--0",shuffle = 1):
         """Performs prediction with this model onto the given video. 
 
+        :param orig_video_path: full path to the video file. Video will also be copied into the model's videos directory. 
+        :param snapshot: the model snapshot to use. defaults to 'snapshot-step2-final--0'
+        :param shuffle: if model was used for xvalidation, gives the train/test split relevant 
         """
+        video_name = os.path.basename(orig_video_path)
+
         video_dir = os.path.join(self.project_dir,"videos_pred")
-        video_path = os.path.join(video_dir,video_name)
+        rawviddir = os.path.join(self.project_dir,"videos")
+        #video_path = os.path.join(video_dir,video_name)
+
+        rawvidpath = os.path.join(rawviddir,video_name)
+        shutil.copyfile(orig_video_path,rawvidpath)
+        
 
         print('Collecting markers from snapshot:')
         print(snapshot)
@@ -505,7 +516,7 @@ class TrainedModel():
         #fps = full_video_clip.fps
         snapshot_path, cfg_yaml = get_snapshot_path(snapshot, self.project_dir, shuffle=shuffle)
         print(cfg_yaml)
-        plot_dgp(str(video_path),
+        plot_dgp(str(orig_video_path),
                 str(video_dir),
                 proj_cfg_file = str(cfg_yaml),
                 dgp_model_file = str(snapshot_path),
@@ -727,8 +738,8 @@ class TrainedModel():
         return xx, yy, likes, nj, bodyparts, softmaxtensor, dlc_cfg
         
     def get_poses_and_heatmap_cache(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
-        """Gets the pose and heatmap information of a predicted video for n_frames consecutive frames, starting from the first in a subclip determined by frame_range. Originally given as get_body in plot_cmap5. Note strange behavior with iter frames: iter_frames on a clip with one frame does not give that first frame. 
-        :param video_name: name of the video. 
+        """Gets the pose and heatmap information of a predicted video for n_frames consecutive frames, starting from the first in a subclip determined by frame_range. Originally given as get_body in plot_cmap5. Note strange behavior with iter frames: iter_frames on a clip with one frame does not give that first frame. IMPORTANT: give the name of the video in the folder videos_pred: we will then look for the corresponding video in the folder videos.
+        :param video_name: name of the labeled video. 
         :param frame_range: range of frames to predict on. 
         :param snapshot: the name of the training snapshot to apply this analysis to. 
         """
@@ -749,9 +760,12 @@ class TrainedModel():
         proj_config['video_path'] = None
         proj_config["project_path"] = self.project_dir ## not running postprocessing in same place as inference, must change. 
 
-        #vars: video_name,frame_range,proj_config,shuffle,dgp_model_file,  
-        #def _get_poses_and_heatmap(video_path,frame_range,proj_config,shuffle,dgp_model_file):
-        video_path = os.path.join(self.project_dir,"videos_pred",video_name)
+        ## Given the name of the labeled video in videos_pred, we will need to run the actual tracking on the unlabeled video in videos.  
+        video,ext = os.path.splitext(video_name)
+        nolabel_list = video.split("_labeled")[:-1]
+        video_nolabel = "".join(nolabel_list)+ext
+        video_path = os.path.join(self.project_dir,"videos",video_nolabel)
+        assert os.path.exists(video_path),"the video {} must exist in videos folder".format(video_nolabel)
         if self.memory is not None:
             cached_heatmap_compute = self.memory.cache(_get_poses_and_heatmap)
             xx, yy, likes, nj, bodyparts, softmaxtensor, dlc_cfg = cached_heatmap_compute(video_path,
