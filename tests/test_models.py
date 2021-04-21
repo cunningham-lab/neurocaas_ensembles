@@ -1,5 +1,6 @@
 ## Test per-model code. 
 import logging
+import yaml
 import numpy as np
 import pytest
 import matplotlib.pyplot as plt
@@ -37,15 +38,14 @@ class Test_Ensemble():
         ens = dgp_ensembletools.models.Ensemble(topdir,modeldirs,ext="mp4")
         scmaps = ens.get_scoremaps("ibl1_labeled.mp4",range(0,4))
         logging.debug(scmaps)
-    def test_get_softmax(self):   
+    def test_get_logistic(self):   
         topdir = os.path.join(loc,"../","data")
         modeldirs = ["{}".format(i+1) for i in range(1)]
         ens = dgp_ensembletools.models.Ensemble(topdir,modeldirs,ext="mp4")
-        softmax = ens.get_softmax("ibl1_labeled.mp4",range(0,4))
+        softmax = ens.get_logistic("ibl1_labeled.mp4",range(0,4))
         for s in softmax:
             assert np.all(s<=1) and np.all(s>=0)
         logging.debug(softmax)
-        
     def test_get_median_pose(self):
         topdir = os.path.join(loc,"../","data")
         modeldirs = ["{}".format(i+1) for i in range(1)]
@@ -53,16 +53,37 @@ class Test_Ensemble():
         med = ens.get_median_pose("ibl1_labeled.mp4",range(0,4))
         print(med)
         logging.debug(med)
-        assert 0 
 
 
 class Test_TrainedModel():
     def test_init(self):
         relpath = "data/1/"
         tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
-        assert tm.pred_videos == ["ibl1_labeled.mp4"]
-        assert tm.label_files == ["ibl1_labeled.csv"]
+        assert "ibl1_labeled.mp4" in tm.pred_videos 
+        assert "ibl1_labeled.csv" in tm.label_files 
+
+    def test_change_project_path(self):
+        relpath = "1/"
+        modelpath = os.path.join(loc,"test_mats/",relpath,"")
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"test_mats/",relpath),ext= "mp4")
+        with open(os.path.join(modelpath,"config.yaml"),"r") as f:
+            oldoutput = yaml.safe_load(f) 
+        tm.change_project_path()
+        with open(os.path.join(modelpath,"config.yaml"),"r") as f:
+            newoutput = yaml.safe_load(f) 
+        print(oldoutput,newoutput)    
+        assert modelpath.startswith(newoutput["project_path"])
+        for k in newoutput["video_sets"]:
+            assert k.startswith(modelpath)
         
+    def test_predict(self):
+        relpath = "1/"
+        modelpath = os.path.join(loc,"test_mats/",relpath,"")
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"test_mats/",relpath),ext= "mp4")
+        tm.predict(os.path.join(loc,"test_mats","testpred.mp4"))
+        assert os.path.exists(os.path.join(modelpath,"videos_pred","testpred_labeled.mp4"))
+        assert os.path.exists(os.path.join(modelpath,"videos","testpred.mp4"))
+
     def test_get_poses_raw(self):    
         relpath = "data/1/"
         tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
@@ -86,20 +107,34 @@ class Test_TrainedModel():
         labelarray = tm.get_poses_array("ibl1_labeled.mp4")
         assert type(labelarray) == np.ndarray
         assert labelarray.shape[1:] == (2,4)
-    def test_get_poses_and_heatmap_range(self):    
+
+    @pytest.mark.parametrize("video",["ibl1.mp4","ibl1_labeled.mp4"])    
+    def test_get_poses_and_heatmap_range(self,video):    
         relpath = "data/1/"
         tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
-        all_outs = tm.get_poses_and_heatmap_range("ibl1_labeled.mp4",frame_range = range(0,2))
-    def test_get_poses_and_heatmap_cache(self):    
+        if video == "ibl1.mp4":
+            with pytest.raises(AssertionError):
+                all_outs = tm.get_poses_and_heatmap_range(video,frame_range = range(0,2))
+        else:        
+            all_outs = tm.get_poses_and_heatmap_range(video,frame_range = range(0,2))
+
+
+    @pytest.mark.parametrize("video",["ibl1.mp4","ibl1_labeled.mp4"])    
+    def test_get_poses_and_heatmap_cache(self,video):    
         relpath = "data/1/"
         tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
-        all_outs = tm.get_poses_and_heatmap_cache("ibl1_labeled.mp4",frame_range = range(0,2))
+        if video == "ibl1.mp4":
+            with pytest.raises(AssertionError):
+                all_outs = tm.get_poses_and_heatmap_cache(video,frame_range = range(0,2))
+        else:
+            all_outs = tm.get_poses_and_heatmap_cache(video,frame_range = range(0,2))
+
 
     @pytest.mark.xfail    
     def test_get_poses_and_heatmap(self):    
         relpath = "data/1/"
         tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
-        all_outs = tm.get_poses_and_heatmap("ibl1_labeled.mp4",framenb = 0)
+        all_outs = tm.get_poses_and_heatmap("ibl1.mp4",framenb = 0)
  
     def test_get_groundtruth(self):
         relpath = "data/1/"
@@ -147,6 +182,24 @@ class Test_TrainedModel():
         tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
         out = tm.compare_groundtruth("ibl1_labeled.mp4",datapath,partperm = [1,3,0,2])
         assert out < 41
+
+    def test_compare_groundtruth_parts_fail(self):    
+        relpath = "data/2/"
+        datapath = "/Users/taigaabe/Downloads/ibl1_true_xy_all_918pm.mat"
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        with pytest.raises(AssertionError):
+            out = tm.compare_groundtruth("ibl1_labeled.mp4",datapath,partperm = [1,3,0,2],parts = [0])
+
+    def test_compare_groundtruth_parts(self):    
+        relpath = "data/2/"
+        datapath = "/Users/taigaabe/Downloads/ibl1_true_xy_all_918pm.mat"
+        tm = dgp_ensembletools.models.TrainedModel(os.path.join(loc,"../",relpath),ext= "mp4")
+        out = tm.compare_groundtruth("ibl1_labeled.mp4",datapath,partperm = [1,3,0,2],parts = np.array([0]))
+        noneout = tm.compare_groundtruth("ibl1_labeled.mp4",datapath,partperm = [1,3,0,2],parts =None)
+        fullout = tm.compare_groundtruth("ibl1_labeled.mp4",datapath,partperm = [1,3,0,2],parts = np.array([0,1,2,3]))
+
+        assert out < 41
+        assert noneout == fullout
 
     def test_marker_epsilon_distance(self):    
         relpath = "data/2/"
