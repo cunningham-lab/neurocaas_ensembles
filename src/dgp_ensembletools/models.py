@@ -445,6 +445,13 @@ class Ensemble():
 
         rawmedpose = self.get_mean_pose(videoname,range(gtlength))    
         medpose = np.stack(rawmedpose,axis = 1) 
+
+        if parts is None:
+            parts = np.array(np.arange(gt.shape[-1]))
+        else:    
+            assert type(parts) == np.ndarray
+            assert len(parts.shape) == 1
+
         if indices is None:
             medrmse = model.marker_epsilon_distance(medpose[:len(gt),:,parts],gt)        
         else:    
