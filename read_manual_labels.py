@@ -20,12 +20,14 @@ import sys
 #"""
 base_dir = Path( sys.argv[1])
 full_dir = Path(sys.argv[2])
+vtype = Path(sys.argv[3])
+if not vtype.startswith("."):
+    vtype = "."+vtype
 print('sys',sys.argv)
 """
 base_dir = Path('/data/datasets/tracki/iblright-kelly-2021-01-03')
 full_dir = '/datahd2a/datasets/tracki/iblfingers'
 """
-vtype = ".mp4"
 labeled_data_dir = base_dir/'labeled-data'
 videos_dir = base_dir /'videos'
 raw_dir = Path(full_dir) / 'raw_data'
@@ -58,10 +60,10 @@ for dataname in datasets_short :
         #pass
         continue
     assert len(data_h5) == 1
-    raw_datasets.append(dataname + '.mp4')
+    raw_datasets.append(dataname + vtype)
     data_h5 = str(Path(labeled_data_dir) / dataname / data_h5[0])
     data_csv = str(Path(labeled_data_dir) / dataname / data_csv[0])
-    data_video = str(Path(videos_dir) / (dataname +'.mp4'))
+    data_video = str(Path(videos_dir) / (dataname +vtype))
     print(data_h5, data_csv)
     df = pd.read_csv(data_csv)
     df = df.values
@@ -106,7 +108,7 @@ for dataname in datasets_short :
         os.makedirs(raw_dir_data)
     np.save('{}.npy'.format(str(raw_dir_data /dataname)), dict1)
     np.save('{}.npy'.format(str(raw_dir_data /'dlc_labels_check')), dict1)
-    copyfile(data_video, str(raw_dir_data /  (dataname +'.mp4')))
+    copyfile(data_video, str(raw_dir_data /  (dataname +vtype)))
 
     #%%
     # check labels
