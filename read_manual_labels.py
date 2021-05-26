@@ -20,7 +20,7 @@ import sys
 #"""
 base_dir = Path( sys.argv[1])
 full_dir = Path(sys.argv[2])
-vtype = Path(sys.argv[3])
+vtype = sys.argv[3]
 if not vtype.startswith("."):
     vtype = "."+vtype
 print('sys',sys.argv)
