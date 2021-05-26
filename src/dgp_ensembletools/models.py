@@ -40,7 +40,7 @@ except PermissionError:
 ## Functions to smooth the heatmap detections 
 def get_mu_fix(ref_, smooth=True):
     """
-    Given an unnoramlized scoremap, returns the  
+    Given an unnoramlized scoremap, returns the 2d softmax 
     :param ref_: should be unnormalized scoremap for outputs of shape (batch size,x,y,part)
 
     """
@@ -297,6 +297,7 @@ class Ensemble():
         :param frame_range:
         :param snapshot:
         :param shuffle:
+        :return: two arrays, ref_x, ref_y, each of shape (time,parts)
 
         """
         for i in range(len(self.models)):
