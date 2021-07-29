@@ -47,6 +47,7 @@ def main(video_name,groundtruth,partperm,labellist,basefolder,resultsfolder):
 
     ## Step 0: First get all diffs:     
     ensembles = [parse_modelname(m,labellist,basefolder) for m in os.listdir(basefolder) if parse_modelname(m,labellist,basefolder) is not None]
+    gt = ensembles[0]["models"][0].get_groundtruth(groundtruth,partperm =partperm )
 
     for e in ensembles:
         e["modeldiffs"] = {"model1":None,"model2":None}
@@ -85,6 +86,7 @@ def main(video_name,groundtruth,partperm,labellist,basefolder,resultsfolder):
         frame_mapping[f] = {"include":params_including,"exclude":params_excluding}
 
     ## Step 2: Now calculate mean deviations for including and excluding:
+    splits = {}
     influences = {}
     influence_vars = {} ## we can calcualate the delta bias and variance. 
     influence_ses = {} ## calculate the delta se as well to make things fair. 
@@ -111,12 +113,14 @@ def main(video_name,groundtruth,partperm,labellist,basefolder,resultsfolder):
         se_include = np.std(dist_include,axis = 0)/np.sqrt(len(include))    
         se_exclude = np.std(dist_exclude,axis = 0)/np.sqrt(len(exclude))    
 
-        influence = mean_include-mean_exclude ## with this measure of influence, higher means the frame is worse. 
-        influence_var = var_include-var_exclude
-        influence_se = se_include-se_exclude
+        influence = mean_include-mean_exclude ## with this measure of influence, higher means the frame is worse: it's the bias
+        influence_var = var_include-var_exclude ## likewise, higher variance is worse
+        influence_se = se_include-se_exclude ## same for standard error. 
         influences[frame] = influence
         influence_ses[frame] = influence_se
         influence_vars[frame] = influence_var
+        ## Finally, save the raw partition: 
+        splits[frame] = {"include":[gt-i for i in include],"exclude":[gt-e for e in exclude]} ## must be gt - difference bc we calculated as gt - detection before. 
     arrayrep = np.array([v for v in influences.values()]).squeeze()  ## (of shape nb_frames,1000,2,4)  
     arrayrep_se = np.array([vse for vse in influence_ses.values()]).squeeze()
     arrayrep_var = np.array([vse for vse in influence_vars.values()]).squeeze()
@@ -152,7 +156,7 @@ def main(video_name,groundtruth,partperm,labellist,basefolder,resultsfolder):
     plt.tight_layout()    
     plt.savefig(os.path.join(scriptdir,"../","images/","influence_mat_se"))
 
-    joblib.dump({"frame_index":inds,"delta_biases":arrayrep,"delta_variances":arrayrep_var,"delta_ses":arrayrep_se},os.path.join(scriptdir,"script_outputs","influence_data"))
+    joblib.dump({"frame_index":inds,"delta_biases":arrayrep,"delta_variances":arrayrep_var,"delta_ses":arrayrep_se,"raw_data":splits},os.path.join(scriptdir,"script_outputs","influence_data"))
 
 if __name__ == "__main__":
     main()
