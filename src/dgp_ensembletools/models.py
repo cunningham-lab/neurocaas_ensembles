@@ -262,7 +262,7 @@ class Ensemble():
         return median_scoremap
 
     def get_mean_scoremap(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1):
-        """Gets the median scoremap. First collects a group of scoremaps, then takes the softmax of each, applies the median, and then transforms back into the scoremap. This is necessary to then pass this scoremap into the smoothing function.   
+        """Gets the median scoremap. First collects a group of scoremaps, then takes the softmax of each, applies the mean, and then transforms back into the scoremap. This is necessary to then pass this scoremap into the smoothing function.   
 
         """
         logistic_tensors = self.get_logistic(video_name,frame_range,snapshot,shuffle)
@@ -799,10 +799,45 @@ class TrainedModel():
 
         return xx, yy, likes, nj, bodyparts, softmaxtensor, dlc_cfg
 
+    def get_scoremap(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1,return_cfg = False):
+        """Get scoremap (unnormalized likelihoods) from the convnet output. 
+
+        :param video_name: name of the labeled video. 
+        :param frame_range: range of frames to predict on. 
+        :param snapshot: the name of the training snapshot to apply this analysis to. 
+        :param return_cfg: default false- if true, returns a tuple that includes the dlc cfg with formatting info for the scoremap. 
+        :returns: array of shape (len(frame_range),48,58,parts)
+        """
+        xr,yr,likes,nj,bodyparts,scmap,dlc_cfg = self.get_poses_and_heatmap_cache(video_name,frame_range,snapshot,shuffle)
+        if return_cfg == False:
+            return scmap    
+        else:
+            return scmap,dlc_cfg    
+
+    def get_logistic(self,video_name,frame_range,snapshot = "snapshot-step2-final--0",shuffle = 1,return_cfg = False):
+        """ Get standard logistic transformation of scoremap. 
+
+        :param video_name: name of the labeled video. 
+        :param frame_range: range of frames to predict on. 
+        :param snapshot: the name of the training snapshot to apply this analysis to. 
+        :param return_cfg: default false- if true, returns a tuple that includes the dlc cfg with formatting info for the scoremap. 
+        :returns: array of shape (len(frame_range),48,58,parts)
+        """
+        scmap = self.get_scoremap(video_name,frame_range,snapshot,shuffle,return_cfg = return_cfg)
+        if return_cfg == False:
+            logistic=  np.exp(scmap)/(np.exp(scmap)+1)
+            return logistic
+        else:
+            scmap_proper,cfg = scmap
+            logistic=  np.exp(scmap_proper)/(np.exp(scmap_proper)+1)
+            return logistic,cfg
+
     def get_groundtruth(self,groundtruth_path,partperm = None):
         """Get groundtruth data. 
 
         :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
+        :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
+        :returns: groundtruth_permuted- an array of shape (frames,xy,len(partperm)/parts)
         """
         groundtruth = loadmat(groundtruth_path)["true_xy"]
         groundtruth_reordered = np.moveaxis(groundtruth,0,-1) ## move parts to the last axis. 
@@ -814,14 +849,65 @@ class TrainedModel():
             assert np.all(np.sort(partperm) == np.sort(range(len(partperm))))
             groundtruth_permuted = groundtruth_reordered[:,:,np.array(partperm)]
         return groundtruth_permuted
+
+    def get_groundtruth_confidence(self,groundtruth_path,video_name,frame_range,partperm = None,snapshot = "snapshot-step2-final--0",shuffle = 1):
+        """Get the confidence output (normalized between [0,1]) corresponding to the groundtruth detection. Right now, calculates this by rounding the groundtruth detection into heatmap coordinates- we could also accomplish this by 2D interpolation of the scoremap in the future. 
+
+        :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
+        :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
+        :param video_name: name of the labeled video. 
+        :param frame_range: range of frames to predict on. 
+        :param snapshot: the name of the training snapshot to apply this analysis to. 
+        """
+        ## First get the groundtruth: 
+        groundtruth = self.get_groundtruth(groundtruth_path,partperm)
+        ## Now get the logistic map: 
+        logistic_scoremaps,cfg  = self.get_logistic(video_name,frame_range,snapshot = snapshot, shuffle = shuffle,return_cfg = True)
+        ## Now reformat the groundtruth to match the stride of the outputs: 
+        groundtruth_seq = groundtruth[frame_range[0]:frame_range[-1],:,:]
+        groundtruth_scaled = (groundtruth_seq-0.5*cfg.stride)/(cfg.stride) ## scale the groundtruth down to the heatmaps. 
+        gt_scaled_int = np.round(groundtruth_scaled).astype(int)
+        ## index into this array. 
+        ### 1. construct indexing arrays for first and last dimensions. These are like the meshgrids, but with matrix indexing: . 
+        shape = np.shape(gt_scaled_int)
+        framesgrid,partsgrid = np.meshgrid(np.arange(shape[0]),np.arange(shape[-1]),indexing = "ij")
+        scores = logistic_scoremaps[framesgrid,gt_scaled_int[:,0,:],gt_scaled_int[:,1,:],partsgrid]
+        return scores
+
         
+    def compare_groundtruth_pointwise(self,labeled_video,groundtruth_path,partperm = None,indices = None,parts=None):
+        """Compare groundtruth data to detections pointwise and get framewise differences. Assumes we want to take groundtruth comparison for whole sequence unless indices are explicitly provided. 
+
+        :param labeled_video: Name of the video that data is provided for. 
+        :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
+        :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
+        :param indices: The frame indices we should include when computing comparison to groundtruth.  
+        :param parts: the parts we should include when computing the groundtruth. Indexed via the parts in the ensemble pose detections, not the groundtruth. Must be given as a 1d numpy array.  
+        """
+        video_clip = self.get_video_clip(labeled_video,None)
+        poses = self.get_poses_array(labeled_video)
+        groundtruth = self.get_groundtruth(groundtruth_path,partperm)
+        if parts is None:
+            parts = np.array(np.arange(groundtruth.shape[-1]))
+        else:    
+            assert type(parts) == np.ndarray
+            assert len(parts.shape) == 1
+        ## Index into the array appropriately    
+        if indices is None: 
+            pose_eval = poses[:len(groundtruth),:,parts]
+            groundtruth_eval = groundtruth
+        else:    
+            pose_eval = poses[indices[:,None,None],np.array([0,1])[:,None],parts]
+            groundtruth_eval = groundtruth[indices,:,:]
+        return groundtruth_eval-pose_eval    
+
     def compare_groundtruth(self,labeled_video,groundtruth_path,partperm = None,indices = None,parts=None):
         """Compare to groundtruth detected data and get rmse. Assumes that we have groundtruth for the whole sequence unless indices are explicitly provided. 
 
         :param labeled_video: Name of the video that data is provided for. 
         :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
         :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
-        :param parts: the parts we should include when computing the groundtruth. Indexed via the parts in the ensemble pose detections, not the groundtruth. Must be given as a 1d numpy array.  
+        :param parts: the parts we should include when computing the groundtruth. Assumed that these parts are EXCLUDED from the given groundtruth. Indexed via the parts in the ensemble pose detections, not the groundtruth. Must be given as a 1d numpy array.  
         """
         video_clip = self.get_video_clip(labeled_video,None)
         poses = self.get_poses_array(labeled_video)
