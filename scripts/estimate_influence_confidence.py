@@ -22,7 +22,7 @@ import numpy as np
 import joblib
 import matplotlib.pyplot as plt
 from dgp_ensembletools.models import Ensemble
-from pose_aum.datavis import DataInclusion
+from dgp_ensembletools.datavis import DataInclusion
 from compare_models_groundtruth import get_training_frames,parse_modelname
 
 scriptdir = os.path.abspath(os.path.dirname(__file__))
@@ -34,7 +34,7 @@ modelpaths = "ensemble-model{i}-2030-01-0{i}"
 @click.option("--groundtruth",default = "../data/ibl/ibl1_true_xy_all_918pm.mat")
 @click.option("--partperm",default = "ibl",help="if we need to permute the labels of the groundtruth before comparing.")
 @click.option("--labellist",help = "path to pickled list of labels and indicator of if they are outliers or not.",default = "../data/ibl/ordered_classified_list")
-@click.option("--basefolder",default = "/Volumes/TOSHIBA EXT STO/pose_results_07_22_21")
+@click.option("--basefolder",default ="/home/ubuntu/july_data")
 @click.option("--resultsfolder",help="path to folder containing json files of outputs.",default = "../data/ibl/consensus_performance")
 def main(video_name,groundtruth,partperm,labellist,basefolder,resultsfolder):
     """Runs after calculate_consensus script. Takes the performance estimates and ensembles from that data, and determines properties of the data from them.  
@@ -55,7 +55,7 @@ def main(video_name,groundtruth,partperm,labellist,basefolder,resultsfolder):
             diff = m.get_groundtruth_confidence(groundtruth,video_name,range(1001),partperm = [1,3,0,2])
             e["modeldiffs"]["model{}".format(mi+1)] = diff
             
-    joblib.dump(e,os.path.join(scriptdir,"script_outputs","influence_data"))
+    joblib.dump(ensembles,os.path.join(scriptdir,"script_outputs","confidence_data"))
 
     ### Step 1: Next, figure out what ensembles see which training data:  
     #all_frames = []
