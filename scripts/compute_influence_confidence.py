@@ -40,7 +40,7 @@ def main(video_name,groundtruth,partperm,labellist,basefolder,resultsfolder):
             diff = m.get_groundtruth_confidence(groundtruth,video_name,range(1001),partperm = [1,3,0,2])
             e["modeldiffs"]["model{}".format(mi+1)] = diff
             
-    joblib.dump(ensembles,os.path.join(scriptdir,"script_outputs","influence_data"))
+    joblib.dump(ensembles,os.path.join(scriptdir,"script_outputs","confidence_data"))
 
 
 if __name__ == "__main__":
