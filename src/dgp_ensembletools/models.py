@@ -871,7 +871,7 @@ class TrainedModel():
         ### 1. construct indexing arrays for first and last dimensions. These are like the meshgrids, but with matrix indexing: . 
         shape = np.shape(gt_scaled_int)
         framesgrid,partsgrid = np.meshgrid(np.arange(shape[0]),np.arange(shape[-1]),indexing = "ij")
-        scores = logistic_scoremaps[framesgrid,gt_scaled_int[:,0,:],gt_scaled_int[:,1,:],partsgrid]
+        scores = logistic_scoremaps[framesgrid,gt_scaled_int[:,1,:],gt_scaled_int[:,0,:],partsgrid] ## gotta be careful about the indexing here! Not consistent between indexing into the matrix and plotting.  
         return scores
 
         
