@@ -195,7 +195,7 @@ Note that Feldman 2020 calculates influence values based on the probability of b
 To get higher resolution on how individual training frames affect the confidence of the network, we also calculate influence not using bias and variance, but using heatmaps. We calculate a score at the groundtruth marker location at each frame, and determine how this changes based on the ensemble that we choose. Note that this is a much more "local" measure of the influence of a frame around the groundtruth output, in that it only cares about how much the heatmap value of the groundtruth location changes as a function of frame inclusion or exclusion. 
 
 analyze_influence_confidence
------------------
+----------------------------
 
 :code:`python analyze_influence_confidence.py --video-name STR --confidences FILE --labellist FILE --basefolder DIR --resultsfolder DIR`
 
@@ -206,7 +206,8 @@ We analyze the outputs of the previous file here. It's interesting to compare th
 
 It's interesting to interpret the effects of individual frames, like frame 25. Compared to the bias estimates, where it was clearly helping all four of the body parts we looked at, it's not clear that the groundtruth is becoming any more likely due to frame 25, just that the paw was localized to an incorrect (but still closer than otherwise) location. We can also examine the distribution of influences (positive and negative) per frame- we see that each frame calculated this way has some distribution of influences, with some positive and some negative entries. The other interesting thing to note is that calculated this way, it doesn't really look like there are bad frames: there are certainly some frames that detract from the confidence estimates of the ground truth, but they don't seem that bad. Consider that this is because what the bad frames do is that they drastically INCREASE the likelihood of a distractor, without necessarily altering the likelihood of the groundtruth. This gives us some insight into the nature of the input to an uncertainty estimate- adding more training examples adds to the heatmap output, and does not seem to detract from already detected features. 
 
-TODO: Try a basic normalization as well and actually calculate probabilities.  
+Note: Feldman 2020 also observes negative influence values (it's in their pre-computed data: https://pluskid.github.io/influence-memorization/) at the very least in their CIFAR data, even looking only at influence between points within the same class assignment. They only consider positive influence datapoints in their study however because their curious about long tails of similar subgroups. It would be cool to make a histogram of the per datapoint influence matrix here and see if we can see some detractor datapoints in the classification data too.  
+
 
 
 
