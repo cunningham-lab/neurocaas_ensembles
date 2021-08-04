@@ -50,3 +50,39 @@ August 3, 2021
 Figured out issues with heatmap code, and replotted. Plotted the per training frame influence histograms as well for the heatmap- would be good to do again but for the probabilities, normalized, not just confidence output. 
 
 Note: Feldman 2020 also observes negative influence values (it's in their pre-computed data: https://pluskid.github.io/influence-memorization/) at the very least in their CIFAR data, even looking only at influence between points within the same class assignment. They only consider positive influence datapoints in their study however because their curious about long tails of similar subgroups. It would be cool to make a histogram of the per datapoint influence matrix here and see if we can see some detractor datapoints in the classification data too.  
+
+August 4, 2021
+--------------
+
+In scripts so far, the functions `get_training_frames` and `parse_modelname` see a lot of reuse. It's definitely worth moving these into the source code and testing. For get_training_frames, it's clear how we might do that (include as a method of the model/ensemble), less so for `parse_modelname`. Also look into free env variables, and replace them with default arguments for the scripts. 
+
+The result of calculating bias and SE shows that there's definitely still an effect if we look at 40 and 52 frames of data. 
+- [X] An important sanity check point now is to calculate the rmse, and show that it's actually consistent with better performance that we saw in `compare_models_groundtruth` when measured with RMSE. 
+  - We calculated the RMSEs here. It looks like there are 16 networks or so that perform poorly- this corresponds to the number of "delinquent networks" that we see. The better performance that we observe at higher training data regimes is true in bulk.   
+  - Takeaway 1: you still see this effect at higher frames, but in this case it's tied to the fact that some networks (surprisingly) still fail here. An argument for going higher.   
+- [ ] Once you've done the sanity check, go ahead and also calculate based on heatmaps. It would be cool to see heatmap changes and influence function changes.    
+  - run compute_influence_confidence.py on the new data. 
+- [ ] What about if we make statements across all seeds?
+  - run compute_consensus, then take jsons and plot together.   
+- [D] What if we restrict our study to 90% ensembles only?   
+
+0. [X] Pull git repo on new instance. 
+1. [X] Pull new data to instance. 
+2. [X] Run compute_consensus.    
+   take json outputs and scp to local, then run plot_consensus on local. + github push.  
+3. [X] Run compute_influence_confidence.    
+   calculate influence matrices and histograms. 
+
+Observations: 
+  - Biggest takeaway is that increasing the number of training frames by one order of magnitude did not help. 
+  - some frames seem notably worse for performance at 70 and 90% splits. Maybe this is because their value has been absorbed by other frames that do not detract so strongly from performance. 
+  - The effects we see at 10 and 30% we definitely also see at 70 and 90%. Some frames are just bad. In fact, at 70 and 90% more frames seem bad. What do we make of this?   
+  - Start looking into data augmentation techniques.   
+  - Start looking into frame removal.   
+  - BUT: importantly, what if you have a sampling bias at either end?   
+  - We can combine the estimates. This gives us something more like the Shapley value of each individual frame. We see that there are still biases and frames that increase bias, but that the magnitude of their effect is much smaller than we would have thought just looking at the 10/30 ensembles or the 70/90 ensembles.   
+  - Furthermore, you don't see a negative effect of these frames on the probability of the groundtruth point.   
+  - I.e. if they are having an effect, it's by increasing the probabiblity of other points away from the groundtruth.   
+  - When you combine the estimates, you see the bias distribution shift strongly negative. Many frames seem to offfer a very positive contribution, although some continue to generate big biases. What could this reduction in negative magnitude of the bias be coming from?   
+    - Consider the effect of a few networks that just go crazy- in this context, the negative impact of a single network will be overestimated. 
+    - The takeaway is that there is still a negative effect.  

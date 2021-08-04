@@ -11,6 +11,7 @@ Welcome to Pose-AUM's documentation!
    :caption: Contents:
 
    README
+   story
    organization
    motivation
    literature

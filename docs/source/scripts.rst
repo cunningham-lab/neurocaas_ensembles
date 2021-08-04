@@ -60,19 +60,22 @@ In order to quantify this effect, let's calculate the consensus per ensemble, an
 calculate_consensus
 -------------------
 
-:code:`python calculate_consensus.py --video-name STRING --groundtruth FILE --partperm STRING --labellist FILE --basefolder DIR` 
+:code:`python calculate_consensus.py --video-name STRING --groundtruth FILE --partperm STRING --labellist FILE --basefolder DIR --resultfolder DIR` 
 returns: 
 
-    - (json) a series of json files containing dictionaries that encode the individual and median performance of different ensembles. 
+    - (json) a series of json files containing dictionaries that encode the individual and median performance of different ensembles: `resultfolder/{modelname}_result.json`. 
 
 This script uses `parse_modelname`, `get_training_frames` from the `compare_models_groundtruth` script. 
 
 This script applies the dgp_ensembletools code to ensembles we constructed newly. The results are saved as json files represnting the per network and median performance (`data/ibl/consensus_performance`)
+This is one of the messiest scripts- especially when it comes to running multiple different kinds of ensembles. We have an except statement at line 20-23 that handles the case of one or two different neurocaas runs separately, which is not ideal. 
 
 plot_consensus
 --------------
 
 :code:`python plot_consensus.py --labellist FILE --ensemblesfolder DIR --resultsfolder DIR`
+returns: 
+    - (image) the consensus performance for all ensembles with which we can calculate a consensus. Taken by looking at the json files located in `resultsfolder` as well as the ensembles given in `ensemblesfolder`. Note that we've symlinked all of the models into a directory `pose_results_agg` for the purpose of easy comparison. If you want to adapt this script, you still need to give all the different frames you're calculating for. 
 
 This script imports the `determine_outliers` function and `ensemble_template` string from `compare_models_groundtruth`. It creates its own version of `parse_modelname`
 #TODO - can these be unified? The difference is between line 71 of the original script and line 24-25 here: Here we assume that our inputs are result.json files in the first argument- string.we can at the very least unify the return: given frames, and seed? It determines what we want to do downstream with this.   
@@ -83,6 +86,13 @@ This script plots the results of the previous script, i.e. consensus performance
 
 NB: the lines indicate pairs of ensembles that share the same seed, i.e. the same subset of 5 training frames. 
 We can see more clearly the trends visible in the per-model data- adding frames seems to make performance worse for all but two ensembles. Let's try and investigate what makes these ensembles improve, when all the others do not? 
+
+UPDATE 08/04:
+We extended this trend with two model ensembles at 70 and 90 percent of the training data. We see some surprising trends here: 
+
+.. image:: images/compare_models_groundtruth_output_consensus_70_90.png
+
+It looks like the 70% split actually improves performance more reliably than the 90% split does. What's going on here?    
 
 What's next? What should come next is an analysis of the function space, but also an analysis of the individual datasets. If we look at the 17 frame set, it looks like there are three distinct groups of performers. Check this out. Likewise, what distinguishes the two ensembles where you do see improvement from adding more data?   
 Also, your characterization of outliers is heuristic at this point. We can improve on this! 
