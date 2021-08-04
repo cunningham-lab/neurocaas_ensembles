@@ -36,7 +36,7 @@ def get_rmse(ensemble,videoname, groundtruth,partperm,test_frames):
 @click.option("--labellist",help = "path to pickled list of labels and indicator of if they are outliers or not.",default = "../data/ibl/ordered_classified_list")
 @click.option("--basefolder",default = "/home/ubuntu/july_data/")
 @click.option("--resultsfolder",help="path where we will write result.json files",default = "../data/ibl/consensus_performance")
-def main(video_name,groundtruth,partperm,labellist,basefolder):
+def main(video_name,groundtruth,partperm,labellist,basefolder,resultsfolder):
     """Runs creation and rmse retrieval of ensembles.  
 
     """
