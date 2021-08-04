@@ -10,12 +10,9 @@ from deepgraphpose.models.eval import load_pose_from_dlc_to_dict
 import click
 import matplotlib.pyplot as plt
 
-base_dir = "/Volumes/TOSHIBA EXT STO/pose_results_07_22_21/"
 ensemble_template = "job__ensemble-dgp_dgpreal_{f}_seed{s}"
 ensemble_template2 = "job__ensemble-dgp_dgpreal2_{f}_seed{s}" ## for other seed
 model_template = "ensemble-model{n}-2030-01-0{n}"
-data_directory = "/Volumes/TOSHIBA EXT STO/pose_results_07_22_21" ## redundant with ensemblepath below. 
-ensemblepath = "/Volumes/TOSHIBA EXT STO/pose_results_07_22_21"
 task = "ibl1"
 
 colors = {2:"#a50026",27:"#d73027",42:"#f46d43",52:"#fee090",89:"#e0f3f8",102:"#abd9e9",122:"#74add1",142:"#4575b4",162:"#fdae61",7700:"#313695"}
@@ -146,23 +143,29 @@ def main(labellist,groundtruth,ensemblesfolder):
     """Take a collection of ensembes of trained networks, and calculate the losses on a set of test data. 
 
     """
+    idstring = os.path.basename(os.path.splitext(groundtruth)[0])+os.path.basename(os.path.normpath(ensemblesfolder))
+
+
     ## Get all ensemble specifying info and calculate if each ensemble has seen outliers or not: 
     ensembles = [parse_modelname(m,labellist,ensemblesfolder) for m in os.listdir(ensemblesfolder) if parse_modelname(m,labellist,ensemblesfolder) is not None]
 
     ## Next, figure out the union of all the training data.  
+    frame_count = []
     all_frames = []
     for e in ensembles:
         nb_frames = e["frames"]
+        frame_count.append(nb_frames)
         seeds = e["seed"]
         template = e["template"]## per- run template. because we prefix some runs as dgpreal2
-        train_frames = get_training_frames(nb_frames,[seeds],data_directory,ensemblepath,task)
+        train_frames = get_training_frames(nb_frames,[seeds],ensemblesfolder,ensemblesfolder,task)
         ## Quick check: assert that these frames are in the appropriate model folder: 
         for t in train_frames:
-            datafolder = os.path.join(base_dir,template.format(f =nb_frames, s = seeds),"process_results",model_template.format(n=1),"labeled-data",task)
+            datafolder = os.path.join(ensemblesfolder,template.format(f =nb_frames, s = seeds),"process_results",model_template.format(n=1),"labeled-data",task)
             contents = os.listdir(datafolder)
             frame_id = "img{0:03d}.png".format(t)
             assert frame_id in contents, "Mismatch between extracted training data and data found in labeled data folder"
         all_frames.extend(train_frames)
+    frame_options = sorted(list(set(frame_count)))
 
     all_training_frames = list(set(all_frames))
     ## Next, evaluate each network's performance on the complement of the union of all the training data.
@@ -183,15 +186,15 @@ def main(labellist,groundtruth,ensemblesfolder):
         outliers = e["outliers"]
         seed = e["seed"]
         for mi,(m,rmse) in enumerate(e["modelrmses"].items()):
-            if frames in (5,17) and seed == 2 and mi == 1:
+            if frames in frame_options and seed == 2 and mi == 1:
                 ax.scatter(frames+np.random.randn(),rmse,s=100,marker = markers[outliers],color= colors[seed],linewidth = 3,label = label[outliers])
             else:    
                 ax.scatter(frames+np.random.randn(),rmse,s=100,marker = markers[outliers],color= colors[seed],linewidth = 3)
-        ax.set_xticks([5,17])    
+        ax.set_xticks(frame_options)    
         plt.xlabel("number of training frames")
         plt.ylabel("rmse")
         plt.legend()    
-    plt.savefig("../images/compare_models_groundtruth_output.png")        
+    plt.savefig("../images/compare_models_groundtruth_output_{}.png".format(idstring))        
     plt.close()
     ## We can also plot them split: 
     fig,ax = plt.subplots(1,2)
@@ -200,18 +203,18 @@ def main(labellist,groundtruth,ensemblesfolder):
         outliers = e["outliers"]
         seed = e["seed"]
         ## did the 5 frame distribution contain outliers? 
-        any_outliers = all([determine_outliers(labellist,seed,5),determine_outliers(labellist,seed,17)]) ## if there are no outliers, it's always going to be the 5 percent distribution
+        any_outliers = all([determine_outliers(labellist,seed,frame_options[0]),determine_outliers(labellist,seed,frame_options[1])]) ## if there are no outliers, it's always going to be the 5 percent distribution
         for mi,(m,rmse) in enumerate(e["modelrmses"].items()):
-            if frames in (5,17) and seed == 2 and mi == 1:
+            if frames in frame_options and seed == 2 and mi == 1:
                 ax[int(any_outliers)].scatter(frames+np.random.randn(),rmse,s=100,marker = markers[outliers],color= colors[seed],linewidth = 2,label = label[outliers])
             else:    
                 ax[int(any_outliers)].scatter(frames+np.random.randn(),rmse,s=100,marker = markers[outliers],color= colors[seed],linewidth = 2)
-        [axi.set_xticks([5,17]) for axi in ax]   
+        [axi.set_xticks(frame_options) for axi in ax]   
     plt.legend()    
     ax[0].set_xlabel("number of training frames")
     ax[1].set_xlabel("number of training frames")
     ax[0].set_ylabel("rmse")
-    plt.savefig("../images/compare_models_groundtruth_output_split.png")        
+    plt.savefig("../images/compare_models_groundtruth_output_split_{}.png".format(idstring))        
     plt.close()
 
         

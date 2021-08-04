@@ -102,8 +102,16 @@ def main(video_name,groundtruth,partperm,labellist,basefolder):
             else:
                 raise Exception("error in parsing paths! ")
         ## We should take the norm, then calculate statistics..     
-        dist_include = np.linalg.norm(np.array(include),axis = 2)
-        dist_exclude = np.linalg.norm(np.array(exclude),axis = 2)
+        try:
+            dist_include = np.linalg.norm(np.array(include),axis = 2)
+            dist_exclude = np.linalg.norm(np.array(exclude),axis = 2)
+        except np.AxisError:    
+            ## don't think we have enough dims. 
+            example_array = e["modeldiffs"]["model1"]
+            dist_include = np.empty((1,example_array.shape[0],example_array.shape[-1]))
+            dist_exclude = np.empty((1,example_array.shape[0],example_array.shape[-1]))
+            dist_include[:] = np.nan
+            dist_exclude[:] = np.nan
 
         mean_include = np.mean(dist_include,axis = 0) ## take the mean along the ensembles dimension   
         mean_exclude = np.mean(dist_exclude,axis = 0)    
@@ -123,7 +131,11 @@ def main(video_name,groundtruth,partperm,labellist,basefolder):
     arrayrep = np.array([v for v in influences.values()]).squeeze()  ## (of shape nb_frames,1000,2,4)  
     arrayrep_se = np.array([vse for vse in influence_ses.values()]).squeeze()
     arrayrep_var = np.array([vse for vse in influence_vars.values()]).squeeze()
-    #normed = np.linalg.norm(arrayrep,axis = 2) ## now as distances in xy
+
+    ## we need an identifying string to save out data: 
+    ## Video name
+    ## Ensemble Location
+    idstring = os.path.splitext(video_name)[0]+os.path.basename(os.path.normpath(basefolder)) ## basefolder better be passed without a trailing dash. 
 
     fig,ax = plt.subplots(arrayrep.shape[-1],1,figsize = (25,25))
     for i in range(arrayrep.shape[-1]):
@@ -133,7 +145,7 @@ def main(video_name,groundtruth,partperm,labellist,basefolder):
         fig.colorbar(mappable,ax=ax[i])
     plt.title("Marginal change in bias as a function of training frame inclusion")    
     plt.tight_layout()    
-    plt.savefig(os.path.join(scriptdir,"../","images/","influence_mat"))
+    plt.savefig(os.path.join(scriptdir,"../","images/","influence_mat_{}".format(idstring)))
 
     fig,ax = plt.subplots(arrayrep_var.shape[-1],1,figsize = (25,25))
     for i in range(arrayrep_var.shape[-1]):
@@ -143,7 +155,7 @@ def main(video_name,groundtruth,partperm,labellist,basefolder):
         fig.colorbar(mappable,ax=ax[i])
     plt.title("Marginal change in variance as a function of training frame inclusion")    
     plt.tight_layout()    
-    plt.savefig(os.path.join(scriptdir,"../","images/","influence_mat_var"))
+    plt.savefig(os.path.join(scriptdir,"../","images/","influence_mat_var_{}".format(idstring)))
 
     fig,ax = plt.subplots(arrayrep_se.shape[-1],1,figsize = (25,25))
     for i in range(arrayrep_se.shape[-1]):
@@ -153,9 +165,9 @@ def main(video_name,groundtruth,partperm,labellist,basefolder):
         fig.colorbar(mappable,ax=ax[i])
     plt.title("Marginal change in standard error as a function of training frame inclusion")    
     plt.tight_layout()    
-    plt.savefig(os.path.join(scriptdir,"../","images/","influence_mat_se"))
+    plt.savefig(os.path.join(scriptdir,"../","images/","influence_mat_se_{}".format(idstring)))
 
-    joblib.dump({"frame_index":inds,"delta_biases":arrayrep,"delta_variances":arrayrep_var,"delta_ses":arrayrep_se,"raw_data":splits},os.path.join(scriptdir,"script_outputs","influence_data"))
+    joblib.dump({"frame_index":inds,"delta_biases":arrayrep,"delta_variances":arrayrep_var,"delta_ses":arrayrep_se,"raw_data":splits},os.path.join(scriptdir,"script_outputs","influence_data_{}".format(idstring)))
 
 if __name__ == "__main__":
     main()
