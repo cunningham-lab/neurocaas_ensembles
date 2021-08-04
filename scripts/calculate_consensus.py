@@ -6,19 +6,23 @@ import json
 import numpy as np
 from dgp_ensembletools.models import Ensemble
 from compare_models_groundtruth import parse_modelname, get_training_frames
-base_dir = "/home/ubuntu/july_data"
 ensemble_template_prefix = "job__ensemble-dgp_dgpreal_"
 ensemble_template_prefix2 = "job__ensemble-dgp_dgpreal2_"
 templates = [ensemble_template_prefix,ensemble_template_prefix2]
 modelpaths = "ensemble-model{i}-2030-01-0{i}"
 
-def make_full_ensemble(path):
+def make_full_ensemble(path,ensemblefolder):
     """Given a prefix path that matches the ensemble template prefix, make an ensemble from it. 
     """
     suffix = path.split(ensemble_template_prefix)[-1]
-    paths = [os.path.join(base_dir,ep+suffix,"process_results",modelpaths.format(i=i)) for ep in templates for i in [1,2]] 
+    try:
+        paths = [os.path.join(ensemblefolder,ep+suffix,"process_results",modelpaths.format(i=i)) for ep in templates for i in [1,2]] 
+        ensemble = Ensemble(os.path.join(ensemblefolder,path,"process_results"),paths,ext = "mp4")
+    except AssertionError: ## for the 70 and 90% ensembles, we only have one round:     
+        paths = [os.path.join(ensemblefolder,ep+suffix,"process_results",modelpaths.format(i=i)) for ep in [ensemble_template_prefix] for i in [1,2]] 
+        ensemble = Ensemble(os.path.join(ensemblefolder,path,"process_results"),paths,ext = "mp4")
 
-    return Ensemble(os.path.join(base_dir,path,"process_results"),paths,ext = "mp4")
+    return ensemble
 
 
 def get_rmse(ensemble,videoname, groundtruth,partperm,test_frames):    
@@ -34,9 +38,9 @@ def get_rmse(ensemble,videoname, groundtruth,partperm,test_frames):
 @click.option("--groundtruth",default = "/home/ubuntu/pose_aum/data/ibl/ibl1_true_xy_all_918pm.mat")
 @click.option("--partperm",default = "ibl",help="if we need to permute the labels of the groundtruth before comparing.")
 @click.option("--labellist",help = "path to pickled list of labels and indicator of if they are outliers or not.",default = "../data/ibl/ordered_classified_list")
-@click.option("--basefolder",default = "/home/ubuntu/july_data/")
-@click.option("--resultsfolder",help="path where we will write result.json files",default = "../data/ibl/consensus_performance")
-def main(video_name,groundtruth,partperm,labellist,basefolder):
+@click.option("--basefolder",default = "/home/ubuntu/july_data/",type = click.Path(resolve_path = True))
+@click.option("--resultsfolder",help="path where we will write result.json files",default = "../data/ibl/consensus_performance",type = click.Path(resolve_path= True))
+def main(video_name,groundtruth,partperm,labellist,basefolder,resultsfolder):
     """Runs creation and rmse retrieval of ensembles.  
 
     """
@@ -53,10 +57,10 @@ def main(video_name,groundtruth,partperm,labellist,basefolder):
         nb_frames = e["frames"]
         seeds = e["seed"]
         template = e["template"]## per- run template. because we prefix some runs as dgpreal2
-        train_frames = get_training_frames(nb_frames,[seeds],basefolder,basefolder,video_name.split("_labeled.mp4"))
+        train_frames = get_training_frames(nb_frames,[seeds],basefolder,basefolder,video_name.split("_labeled.mp4")[0])
         ## Quick check: assert that these frames are in the appropriate model folder: 
         for t in train_frames:
-            datafolder = os.path.join(basefolder,template.format(f =nb_frames, s = seeds),"process_results",modelpaths.format(i=1),"labeled-data",video_name.split("_labeled.mp4"))
+            datafolder = os.path.join(basefolder,template.format(f =nb_frames, s = seeds),"process_results",modelpaths.format(i=1),"labeled-data",video_name.split("_labeled.mp4")[0])
             contents = os.listdir(datafolder)
             frame_id = "img{0:03d}.png".format(t)
             assert frame_id in contents, "Mismatch between extracted training data and data found in labeled data folder"
@@ -72,7 +76,7 @@ def main(video_name,groundtruth,partperm,labellist,basefolder):
     all_folders = os.listdir(basefolder)
     for f in all_folders:
         if f.startswith(ensemble_template_prefix):
-            e = make_full_ensemble(f)
+            e = make_full_ensemble(f,basefolder)
             rmse_dict = get_rmse(e,video_name,groundtruth,partperm,all_test_frames)
             rmse_dict["name"] = f
             with open(os.path.join(resultsfolder,f+"results.json"),"w") as f:
