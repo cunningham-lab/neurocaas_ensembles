@@ -1,4 +1,4 @@
-## Script to save out example frames. 
+## Script to save out example frames from videos we care about. 
 import dgp_ensembletools.models
 import os
 
@@ -6,8 +6,8 @@ loc = os.path.abspath(os.path.dirname(__file__))
 saveloc = os.path.join(loc,"script_mats")
 
 ensembledata = {
-        "../data":{"nb_models":4,"video":"ibl1_labeled.mp4","frames":[73,74,75]},
-        "../fishdata":{"nb_models":5,"video":"male1_labeled.mp4","frames":[340,420,430]}
+        "../data/ibl_data":{"nb_models":4,"video":"ibl1_labeled.mp4","frames":[73,74,75]},
+        "../data/fishdata":{"nb_models":5,"video":"male1_labeled.mp4","frames":[340,420,430]}
         }
 
 if __name__ == "__main__":

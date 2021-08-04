@@ -92,7 +92,7 @@ def main(video_name,confidences,labellist,basefolder,resultsfolder):
 
         delta_confidences[frame] = delta_confidence
         ## Finally, save the raw partition: 
-        splits[frame] = {"include":[gt-i for i in include],"exclude":[gt-e for e in exclude]} ## must be gt - difference bc we calculated as gt - detection before. 
+        #splits[frame] = {"include":[gt-i for i in include],"exclude":[gt-e for e in exclude]} ## must be gt - difference bc we calculated as gt - detection before. 
     confarrayrep = np.array([v for v in delta_confidences.values()]).squeeze()  ## (of shape nb_frames,1000,4)  
     #normed = np.linalg.norm(arrayrep,axis = 2) ## now as distances in xy
 
@@ -105,8 +105,17 @@ def main(video_name,confidences,labellist,basefolder,resultsfolder):
     plt.title("Marginal change in confidence as a function of training frame inclusion")    
     plt.tight_layout()    
     plt.savefig(os.path.join(scriptdir,"../","images/","influence_confidence_mat"))
+    plt.close()
 
-    joblib.dump({"frame_index":inds,"delta_conf":confarrayrep,"raw_data":splits},os.path.join(scriptdir,"script_outputs","delta_confidence_data"))
+    ## Additionally, plot per-frame histograms of the influence based confidence:
+    for i in range(len(inds)):
+        plt.hist(confarrayrep[i,:,:].flatten())
+        plt.title("Histogam of influences for Frame {}".format(inds[i]))
+        plt.savefig(os.path.join(scriptdir,"../","images/","influence_confidence_frame{i}_hist.png".format(i = inds[i])))
+        plt.close()
+
+
+    joblib.dump({"frame_index":inds,"delta_conf":confarrayrep},os.path.join(scriptdir,"script_outputs","delta_confidence_data"))
 
 if __name__ == "__main__":
     main()
