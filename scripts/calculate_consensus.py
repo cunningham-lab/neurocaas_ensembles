@@ -53,7 +53,7 @@ def main(video_name,groundtruth,partperm,labellist,basefolder,resultsfolder):
         nb_frames = e["frames"]
         seeds = e["seed"]
         template = e["template"]## per- run template. because we prefix some runs as dgpreal2
-        train_frames = get_training_frames(nb_frames,[seeds],basefolder,basefolder,video_name.split("_labeled.mp4"))
+        train_frames = get_training_frames(nb_frames,[seeds],basefolder,basefolder,video_name.split("_labeled.mp4")[0])
         ## Quick check: assert that these frames are in the appropriate model folder: 
         for t in train_frames:
             datafolder = os.path.join(basefolder,template.format(f =nb_frames, s = seeds),"process_results",modelpaths.format(i=1),"labeled-data",video_name.split("_labeled.mp4"))
