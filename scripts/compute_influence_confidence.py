@@ -25,6 +25,7 @@ def main(video_name,groundtruth,partperm,labellist,ensemblesfolder):
 
     """
     idstring = os.path.splitext(video_name)[0]+os.path.basename(os.path.normpath(ensemblesfolder))
+
     if partperm == "ibl":
         partperm = np.array([1,3,0,2]) # permute parts before comparing
     else:
