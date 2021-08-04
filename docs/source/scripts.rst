@@ -39,6 +39,14 @@ compare_models_groundtruth
 
 :code:`python compare_models_groundtruth.py --ensemblesfolder FILE --labellist FILE --groundtruth FILE`
 
+returns:
+
+    - Plotted distribution of rmses (`neurocaas_ensembles/images/compare_models_groundtruth_output_{groundtruth,ensembles}.png`) 
+    - Plotted distribution of rmses split between outliers and nonoutlier including ones (`neurocaas_ensembles/images/compare_models_groundtruth_output_split_{groundtruth,ensembles}.png`)
+
+Generates functions `determine_outliers` (determine if a particular random seed and frame count will have outliers), `parse_modelname` (given a string describing the name of an ensemble, parse out its relevant detauls and save a dictionary of info), `get_training frames` (determine the training frames used by a particular ensemble (direct from the model, not from the seed and frames))
+#TODO `get_training_frames` can be turned into a method of the ensemble (and the trained model). Include a warning if the model's recorded seed and frames parameters don't expect the actual training frames seen. 
+
 This script looks at a set of ensembles, having training sets chosen with different random seeds, and a careful accounting of when the training sets contain outliers or not. It then plots the rmse of each individual model on a shared test set that disjoint from all training data. The results are shown below:   
 
 .. image:: images/compare_models_groundtruth_output.png
@@ -53,6 +61,11 @@ calculate_consensus
 -------------------
 
 :code:`python calculate_consensus.py --video-name STRING --groundtruth FILE --partperm STRING --labellist FILE --basefolder DIR` 
+returns: 
+
+    - (json) a series of json files containing dictionaries that encode the individual and median performance of different ensembles. 
+
+This script uses `parse_modelname`, `get_training_frames` from the `compare_models_groundtruth` script. 
 
 This script applies the dgp_ensembletools code to ensembles we constructed newly. The results are saved as json files represnting the per network and median performance (`data/ibl/consensus_performance`)
 
@@ -60,6 +73,9 @@ plot_consensus
 --------------
 
 :code:`python plot_consensus.py --labellist FILE --ensemblesfolder DIR --resultsfolder DIR`
+
+This script imports the `determine_outliers` function and `ensemble_template` string from `compare_models_groundtruth`. It creates its own version of `parse_modelname`
+#TODO - can these be unified? The difference is between line 71 of the original script and line 24-25 here: Here we assume that our inputs are result.json files in the first argument- string.we can at the very least unify the return: given frames, and seed? It determines what we want to do downstream with this.   
 
 This script plots the results of the previous script, i.e. consensus performance from each ensemble. 
 
@@ -76,6 +92,8 @@ create_data_inclusion_matrix
 
 :code:`python create_data_inclusion_matrix.py --video_name STR --groundtruth FILE --partperm STR --labellist FILE --basefolder DIR --resultsfolder DIR`
 
+This script imports `parse_modelname` from `plot_consensus` (the version with results), and `get_training_frames` from `compare_models_groundtruth` (determine training frames).  
+
 This script considers the ensembles that you've created, and then creates a matrix showing the individual datapoints that are included in each ensemble's training data. It creates two plots: first, a matrix of the ensemble training data and relevant test frames in a random order, and a second with the ensemble seeds sorted according to RMSE (best at the top) and the frames sorted by increasing index. We show this second output here:   
 
 .. image:: images/DataInclusionMatrix_Sortedibl1_labeled.mp4.png
@@ -87,6 +105,8 @@ create_pca_model
 
 :code:`python create_pca_model.py --labellist FILE --groundtruth FILE --ensemblesfolder DIR`
 
+This model is pretty strongly coupled to compare_models_groundtruth (many variables imported) but we don't necessarily care about pursing the analysis further. If we were to, clean up.
+
 This script takes the individual models that you have trained, and evaluates not the RMSE, but the per-frame deviation of the predicted pose output from the groundtruth on all test frames. Once it has collected the per-frame deviation across all models, it flattens the deviation (across xy and body parts) into a single feature vector and performs PCA. The transformed data, model, and labels are stored into a model, `pca_with_labels`. 
 
 plot_pca
@@ -95,6 +115,7 @@ plot_pca
 :code:`python plot_pca.py --modelpath FILE --nb-parts INT`
 
 This script takes the output of the previous one, and plots interesting features of the PCA model output. 
+This script also takes in `colors` and `markers` variables from compare_models_groundtruth. It might be good to standardize formatting for plotting in a separate file. 
 
 .. image:: images/pcafig.png
 
@@ -108,7 +129,15 @@ The bottom left panel shows the distribution of individual models in the PC spac
 estimate_influence
 ------------------
 
-:code:`python estimate_influence.py --video-name STR --groundtruth FILE --partperm STR --labellist FILE --basefolder DIR --resultsfolder DIR`
+:code:`python estimate_influence.py --video-name STR --groundtruth FILE --partperm STR --labellist FILE --basefolder DIR`
+
+returns: 
+    - (image) marginal change in bias as a function of training frame inclusion (`neurocaas_ensembles/images/influence_mat_{videoname,ensemblefolder}`)
+    - (image) marginal change in variance as a function of training frame inclusion (`neurocaas_ensembles/images/influence_mat_var_{videoname,ensemblefolder}`)
+    - (image) marginal change in standard error as a function of training frame inclusion (`neurocaas_ensembles/images/influence_mat_se_{videoname,ensemblefolder}`)
+    - (pickled dict) frame bias, and raw data saved as `neurocaas_ensembles/script_outputs/influence_data_{videoname,ensemblefolder}`.  
+
+This script takes functions `get_training_frames` and `parse_modelname` from the `compare_models_groundtruth` script. 
 
 This is our first attempt to estimate an influence function across our small training set. It's still not clear what the best way to do this for our case is, so right now what we're measuring is the magnitude of the average deviance and standard error of that deviance from groundtruth as calculated from a set of traces corresponding to models that HAVE seen a particular frame, and those that have not. Quantitatively, we are measuring the bias, variance, and standard error of different models. Given a set of trained networks, :math:`\{\phi\}`, We define these quantities in terms of two ensembles of networks, :math:`\{\phi\}_{i}` and :math:`\{\phi\}_{\i}`, corresponding to those networks that contain training frame :math:`x_i` and those that do not. Furthermore, for each video frame :math:`x_i`, and corresponding part detection :math:`y_i`, with both representing vectors. :math:`\phi(x_i)` represents a given network's approximation of :math:`y_i`.  Given these two quantities, we define the delta bias and standard error as follows: 
 
@@ -144,6 +173,10 @@ analyze_influence
 -----------------
 
 :code:`python analyze_influence.py --ensembledict FILE --framedir DIR --videopath PATH`
+returns:
+    - (image) visualization of memorization factors for all training frames at `neurocaas_ensembles/scripts/script_outputs/memorization{trainframe}_{data_id}.png`
+    - (image) visualization of highest influence pairs for each training frame at `neurocaas_ensembles/scripts/script_outputs/influence{trainframe}_{testframe}_{data_id}.png`
+
 
 The measures of :math:`\Delta bias` and :math:`\Delta se` can be tied into the memorization/influence framework of Feldman 2020. To begin with, we can analyze memorization and influence in terms of bias:  
 
@@ -188,7 +221,12 @@ Some of the ensemble splits here are quite small: in the Frame 43 example above,
 compute_influence_confidence
 ----------------------------
 
-:code:`python compute_influence_confidence.py --video-name STR --groundtruth FILE --partperm STR --labellist FILE --basefolder DIR --resultsfolder DIR`
+:code:`python compute_influence_confidence.py --video-name STR --groundtruth FILE --partperm STR --labellist FILE --ensemblesfolder DIR`
+returns:
+
+    - (joblib object) joblib pickled dictionary of diferent models and their estimation of the groundtruth confidence `neurocaas_ensembles/scripts/script_outputs/confidence_data_{videoname,ensemblesfolder}`. 
+
+This script takes the `get_training_frames` and `parse_modelname` functions from `compare_models_groundtruth`
 
 Note that Feldman 2020 calculates influence values based on the probability of being correct or not averaged over model training specifications, and not necessarily taking into account the uncertainty of the network itself. What if we used our heatmap outputs to determine an influence function that accounts for the uncertainty of an individual model instead? 
 
@@ -197,7 +235,15 @@ To get higher resolution on how individual training frames affect the confidence
 analyze_influence_confidence
 ----------------------------
 
-:code:`python analyze_influence_confidence.py --video-name STR --confidences FILE --labellist FILE --basefolder DIR --resultsfolder DIR`
+:code:`python analyze_influence_confidence.py --video-name STR --confidences FILE --labellist FILE --ensemblesfolder DIR`
+returns: 
+
+    - (image) matrix showing the influence of each training frame on each output frame due to its inclusion in the training set or not `neurocaas_ensembles/images/influence_confidence_mat_{videoname,ensemblesfolder}`. 
+    - (image) Per-training frame histogram of the influences across the entire test set for a given frame `neurocaas_ensembles/images/influence_confidence_frame{i}_hist_{videoname,ensemblesfolder}`.   
+    - (pickled dict) dictionary giving processed confidence data as differences `neurocaas_ensembles/scripts/script_outputs/delta_confidence_data_{videoname,ensemblesfolder}` 
+
+
+This script takes the `get_training_frames` and `parse_modelname` functions from `compare_models_groundtruth`
 
 We analyze the outputs of the previous file here. It's interesting to compare the values that we see here to those that we got from measuring the bias and variance in terms of the maximum position. It looks less clear that certain frames are contributing to/detracting from performance across the board, although we should quantify this to see. We can also see more widespread effects here- whereas the bias effects were limited to individual bands of the test video, it looks like the confidence effects can be seen across a wider range. 
 
