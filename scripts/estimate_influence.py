@@ -35,8 +35,7 @@ modelpaths = "ensemble-model{i}-2030-01-0{i}"
 @click.option("--partperm",default = "ibl",help="if we need to permute the labels of the groundtruth before comparing.")
 @click.option("--labellist",help = "path to pickled list of labels and indicator of if they are outliers or not.",default = "../data/ibl/ordered_classified_list")
 @click.option("--basefolder",default = "/Volumes/TOSHIBA EXT STO/pose_results_07_22_21")
-@click.option("--resultsfolder",help="path to folder containing json files of outputs.",default = "../data/ibl/consensus_performance")
-def main(video_name,groundtruth,partperm,labellist,basefolder,resultsfolder):
+def main(video_name,groundtruth,partperm,labellist,basefolder):
     """Runs after calculate_consensus script. Takes the performance estimates and ensembles from that data, and determines properties of the data from them.  
 
     """
