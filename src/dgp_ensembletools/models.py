@@ -858,6 +858,7 @@ class TrainedModel():
         :param video_name: name of the labeled video. 
         :param frame_range: range of frames to predict on. 
         :param snapshot: the name of the training snapshot to apply this analysis to. 
+        :returns: array of scores of shape (frames,parts) that gives the confidence at the groundtruth location in each frame for each part.  
         """
         ## First get the groundtruth: 
         groundtruth = self.get_groundtruth(groundtruth_path,partperm)
@@ -874,7 +875,32 @@ class TrainedModel():
         scores = logistic_scoremaps[framesgrid,gt_scaled_int[:,1,:],gt_scaled_int[:,0,:],partsgrid] ## gotta be careful about the indexing here! Not consistent between indexing into the matrix and plotting.  
         return scores
 
-        
+    def get_groundtruth_probability(self,groundtruth_path,video_name,frame_range,partperm = None,snapshot = "snapshot-step2-final--0",shuffle = 1):
+        """Get the probability output (normalized between [0,1] AND normalized across the entire scoremap) corresponding to the groundtruth detection. Right now, calculates this by rounding the groundtruth detection into heatmap coordinates- we could also accomplish this by 2D interpolation of the scoremap in the future. 
+
+        :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
+        :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
+        :param video_name: name of the labeled video. 
+        :param frame_range: range of frames to predict on. 
+        :param snapshot: the name of the training snapshot to apply this analysis to. 
+        :returns: array of scores of shape (frames,parts) that gives the probability (normalized confidence) at the groundtruth location in each frame for each part.  
+        """
+        ## First get the groundtruth: 
+        groundtruth = self.get_groundtruth(groundtruth_path,partperm)
+        ## Now get the logistic map: 
+        logistic_scoremaps,cfg  = self.get_logistic(video_name,frame_range,snapshot = snapshot, shuffle = shuffle,return_cfg = True) ## scoremaps have shape (frame_range,x,y,parts)
+        logistic_mass = np.sum(logistic_scoremaps,axis = (1,2),keepdims=True)
+        logistic_probs = logistic_scoremaps/logistic_mass
+        ## Now reformat the groundtruth to match the stride of the outputs: 
+        groundtruth_seq = groundtruth[frame_range[0]:frame_range[-1],:,:]
+        groundtruth_scaled = (groundtruth_seq-0.5*cfg.stride)/(cfg.stride) ## scale the groundtruth down to the heatmaps. 
+        gt_scaled_int = np.round(groundtruth_scaled).astype(int)
+        ## index into this array. 
+        ### 1. construct indexing arrays for first and last dimensions. These are like the meshgrids, but with matrix indexing: . 
+        shape = np.shape(gt_scaled_int)
+        framesgrid,partsgrid = np.meshgrid(np.arange(shape[0]),np.arange(shape[-1]),indexing = "ij")
+        scores = logistic_probs[framesgrid,gt_scaled_int[:,1,:],gt_scaled_int[:,0,:],partsgrid] ## gotta be careful about the indexing here! Not consistent between indexing into the matrix and plotting.  
+        return scores
     def compare_groundtruth_pointwise(self,labeled_video,groundtruth_path,partperm = None,indices = None,parts=None):
         """Compare groundtruth data to detections pointwise and get framewise differences. Assumes we want to take groundtruth comparison for whole sequence unless indices are explicitly provided. 
 
