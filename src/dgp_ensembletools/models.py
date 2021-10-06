@@ -551,11 +551,32 @@ class TrainedModel():
         labels = load_pose_from_dlc_to_dict(path)
         return labels
 
+    def get_poses_raw_direct(self,trace_file):    
+        """Gets the pose directly. 
+        
+        :param trace_file: trace file. 
+        :returns: the output of deepgraphpose.models.eval.load_pose_from_dlc_to_dict. This dictionary has keys "x","y","likelihoods", and 
+        """
+        assert csv_name in self.label_files, "label file must exist."  
+        path = os.path.join(self.project_dir,"videos_pred",csv_name)
+        labels = load_pose_from_dlc_to_dict(path)
+        return labels
+
     def get_poses_array(self,video_name):
         """Processes the pose into an array of shape (time,xy,body part) 
 
         """
         labels = self.get_poses_raw(video_name)
+        xr,yr = labels["x"],labels["y"]
+        labelarray = np.stack((xr,yr),axis = 1)
+        return labelarray
+
+    def get_poses_array_direct(self,trace_file): 
+        """Load poses directly from the name of the trace file, not the video.
+
+        :param trace_file: path to csv file of traces. 
+        """
+        labels = self.get_poses_raw_direct(trace_file)
         xr,yr = labels["x"],labels["y"]
         labelarray = np.stack((xr,yr),axis = 1)
         return labelarray
@@ -901,6 +922,31 @@ class TrainedModel():
         framesgrid,partsgrid = np.meshgrid(np.arange(shape[0]),np.arange(shape[-1]),indexing = "ij")
         scores = logistic_probs[framesgrid,gt_scaled_int[:,1,:],gt_scaled_int[:,0,:],partsgrid] ## gotta be careful about the indexing here! Not consistent between indexing into the matrix and plotting.  
         return scores
+    def compare_groundtruth_pointwise_direct(self,trace_file,groundtruth_path,partperm = None,indices = None,parts=None):
+        """Compare groundtruth data to detections pointwise and get framewise differences. Assumes we want to take groundtruth comparison for whole sequence unless indices are explicitly provided. 
+
+        :param trace_file: Path to trace file
+        :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
+        :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
+        :param indices: The frame indices we should include when computing comparison to groundtruth.  
+        :param parts: the parts we should include when computing the groundtruth. Indexed via the parts in the ensemble pose detections, not the groundtruth. Must be given as a 1d numpy array.  
+        """
+        poses = self.get_poses_array_direct(trace_file)
+        groundtruth = self.get_groundtruth(groundtruth_path,partperm)
+        if parts is None:
+            parts = np.array(np.arange(groundtruth.shape[-1]))
+        else:    
+            assert type(parts) == np.ndarray
+            assert len(parts.shape) == 1
+        ## Index into the array appropriately    
+        if indices is None: 
+            pose_eval = poses[:len(groundtruth),:,parts]
+            groundtruth_eval = groundtruth
+        else:    
+            pose_eval = poses[indices[:,None,None],np.array([0,1])[:,None],parts]
+            groundtruth_eval = groundtruth[indices,:,:]
+        return groundtruth_eval-pose_eval    
+
     def compare_groundtruth_pointwise(self,labeled_video,groundtruth_path,partperm = None,indices = None,parts=None):
         """Compare groundtruth data to detections pointwise and get framewise differences. Assumes we want to take groundtruth comparison for whole sequence unless indices are explicitly provided. 
 
@@ -926,6 +972,34 @@ class TrainedModel():
             pose_eval = poses[indices[:,None,None],np.array([0,1])[:,None],parts]
             groundtruth_eval = groundtruth[indices,:,:]
         return groundtruth_eval-pose_eval    
+
+    def compare_groundtruth_direct(self,trace_file,groundtruth_path,partperm = None,indices = None,parts=None):
+        """Compare to groundtruth detected data and get rmse. Assumes that we have groundtruth for the whole sequence unless indices are explicitly provided. 
+
+        :param trace_file: path to trace file.  
+        :param groundtruth_path: Path to groundtruth labeled data. Assumes that data at this path is a .mat file, with the entry data["true_xy"] a numpy array of shape (parts,time,xy) for the whole labeled video.   
+        :param partperm: permute the ordering of parts in the groundtruth dataset to match the pose network output. 
+        :param parts: the parts we should include when computing the groundtruth. Assumed that these parts are EXCLUDED from the given groundtruth. Indexed via the parts in the ensemble pose detections, not the groundtruth. Must be given as a 1d numpy array.  
+        """
+        poses = self.get_poses_array_direct(trace_file)
+        groundtruth = self.get_groundtruth(groundtruth_path,partperm)
+        if parts is None:
+            parts = np.array(np.arange(groundtruth.shape[-1]))
+        else:    
+            assert type(parts) == np.ndarray
+            assert len(parts.shape) == 1
+
+
+        ## calculate rmse: 
+        #rmse = np.sqrt(np.mean((poses[:len(groundtruth),:,:] - groundtruth)**2))
+        if indices is None:
+            rmse = self.marker_epsilon_distance(poses[:len(groundtruth),:,parts],groundtruth)
+        else:    
+            assert type(indices) == np.ndarray
+            poses_reshaped = poses[indices[:,None,None],np.array([0,1])[:,None],parts] ## a pain to reshape for missing parts...
+            rmse = self.marker_epsilon_distance(poses_reshaped,groundtruth[indices,:,:])
+
+        return rmse
 
     def compare_groundtruth(self,labeled_video,groundtruth_path,partperm = None,indices = None,parts=None):
         """Compare to groundtruth detected data and get rmse. Assumes that we have groundtruth for the whole sequence unless indices are explicitly provided. 
