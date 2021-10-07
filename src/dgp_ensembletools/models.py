@@ -557,9 +557,7 @@ class TrainedModel():
         :param trace_file: trace file. 
         :returns: the output of deepgraphpose.models.eval.load_pose_from_dlc_to_dict. This dictionary has keys "x","y","likelihoods", and 
         """
-        assert csv_name in self.label_files, "label file must exist."  
-        path = os.path.join(self.project_dir,"videos_pred",csv_name)
-        labels = load_pose_from_dlc_to_dict(path)
+        labels = load_pose_from_dlc_to_dict(trace_file)
         return labels
 
     def get_poses_array(self,video_name):
